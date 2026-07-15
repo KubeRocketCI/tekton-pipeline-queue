@@ -1,135 +1,117 @@
 # tekton-pipeline-queue
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+A Kubernetes operator that queues [Tekton](https://tekton.dev) PipelineRuns.
+It serializes or limits concurrent PipelineRuns per *lane* — an arbitrary
+combination of label values such as codebase, branch, pull request, or
+CD pipeline + stage — instead of letting every run start at once and compete
+for cluster resources.
 
-## Getting Started
+Part of the [KubeRocketCI](https://docs.kuberocketci.io) platform, usable with
+any Tekton installation.
 
-### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+## How it works
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+The operator builds on Tekton's native pause primitive, `spec.status: PipelineRunPending`:
 
-```sh
-make docker-build docker-push IMG=<some-registry>/tekton-pipeline-queue:tag
+1. **Producers** (Tekton TriggerTemplates, operators, UI) create PipelineRuns
+   with `spec.status: PipelineRunPending` and identifying labels. Tekton
+   accepts the run but starts nothing — no TaskRuns, no pods.
+2. A **`PipelineRunQueue`** resource selects the runs it governs (label
+   selector), derives a *lane* for each run from the values of the
+   `queueKey` labels, and defines per-lane `concurrency` and a `strategy`.
+3. The **controller** watches PipelineRuns and, on every change, re-derives
+   each lane from the live cluster state: pending runs are admitted FIFO
+   (by creation time) by clearing `spec.status` while the number of running
+   runs is below `concurrency`; superseded runs are gracefully cancelled
+   (`CancelledRunFinally`) depending on the strategy.
+
+There is no stored queue: the live PipelineRun set is the single source of
+truth, so controller restarts, out-of-band deletions, and manual cancellations
+converge automatically. `status.lanes` is a read-only projection for
+observability (portal, `kubectl`).
+
+## Example
+
+Serialize deployments per CD pipeline stage — one deploy at a time, the rest
+visibly queued:
+
+```yaml
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: deploy-queue
+spec:
+  selector:
+    matchLabels:
+      app.edp.epam.com/pipelinetype: deploy
+  queueKey:
+    - app.edp.epam.com/cdpipeline
+    - app.edp.epam.com/cdstage
+  concurrency: 1
+  strategy: Queue
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
-
-```sh
-make install
+```console
+$ kubectl get pipelinerunqueue deploy-queue
+NAME           QUEUED   RUNNING   READY   AGE
+deploy-queue   4        1         True    2d
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+### Strategies
+
+| Strategy | Behavior |
+|---|---|
+| `Queue` | Strict FIFO admission; nothing is ever cancelled. |
+| `ReplaceQueued` | Queued runs superseded by a newer arrival in the same lane are cancelled; only the newest waits. |
+| `CancelInProgress` | As `ReplaceQueued`, plus running runs older than the newest arrival are gracefully cancelled. |
+
+Typical lane keys: `codebase + branch` for build pipelines,
+`codebase + change number` for review pipelines (with `ReplaceQueued` or
+`CancelInProgress`), `cdpipeline + cdstage` for deployments.
+
+## Installation
+
+Requires an existing Tekton Pipelines installation (the operator watches
+`tekton.dev/v1` PipelineRuns and never installs or owns that CRD).
+
+Helm chart (includes CRDs):
 
 ```sh
-make deploy IMG=<some-registry>/tekton-pipeline-queue:tag
+helm install tekton-pipeline-queue ./deploy-templates -n krci
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+Or with kustomize during development:
 
 ```sh
-kubectl apply -k config/samples/
+make install          # CRDs
+make deploy IMG=docker.io/epamedp/tekton-pipeline-queue:<tag>
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+## Metrics
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
+Prometheus metrics exposed by the controller:
+
+| Metric | Type | Labels |
+|---|---|---|
+| `tekton_pipeline_queue_depth` | gauge | queue, namespace, lane |
+| `tekton_pipeline_queue_running` | gauge | queue, namespace, lane |
+| `tekton_pipeline_queue_admissions_total` | counter | queue, namespace |
+| `tekton_pipeline_queue_cancellations_total` | counter | queue, namespace, strategy |
+| `tekton_pipeline_queue_time_in_queue_seconds` | histogram | queue, namespace |
+
+## Development
 
 ```sh
-kubectl delete -k config/samples/
+make build            # compile the manager
+make test             # unit + envtest integration tests
+make lint             # golangci-lint
+make manifests        # regenerate CRDs (config/crd/bases + deploy-templates/crds) and docs/api.md
+make helm-docs        # regenerate deploy-templates/README.md
 ```
 
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/tekton-pipeline-queue:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/tekton-pipeline-queue/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+API reference: [docs/api.md](docs/api.md). Chart values:
+[deploy-templates/README.md](deploy-templates/README.md).
 
 ## License
 
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
+Apache-2.0 — see [LICENSE.txt](LICENSE.txt).

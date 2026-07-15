@@ -85,7 +85,16 @@ func init() {
 // which keeps stale (disappeared) lanes from lingering in exported metrics
 // without having to diff against the previous reconcile's lane set.
 func resetLaneMetrics(queue *edpv1alpha1.PipelineRunQueue) {
-	matchQueue := prometheus.Labels{metricLabelQueue: queue.Name, metricLabelNamespace: queue.Namespace}
+	deleteQueueMetrics(queue.Name, queue.Namespace)
+}
+
+// deleteQueueMetrics removes all depth/running gauge series for a queue.
+// Called when a queue is deleted or stops being reconcilable (invalid
+// selector), so dashboards don't keep reporting the last-observed values
+// for a queue that no longer produces them. Counters/histograms are kept:
+// totals remain meaningful after deletion and are cheap to retain.
+func deleteQueueMetrics(name, namespace string) {
+	matchQueue := prometheus.Labels{metricLabelQueue: name, metricLabelNamespace: namespace}
 
 	queueDepth.DeletePartialMatch(matchQueue)
 	queueRunning.DeletePartialMatch(matchQueue)

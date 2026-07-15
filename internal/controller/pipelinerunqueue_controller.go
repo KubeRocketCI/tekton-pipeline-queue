@@ -76,6 +76,10 @@ func (r *PipelineRunQueueReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	queue := &edpv1alpha1.PipelineRunQueue{}
 	if err := r.Get(ctx, req.NamespacedName, queue); err != nil {
 		if apierrors.IsNotFound(err) {
+			// The queue is gone; drop its gauge series so dashboards don't
+			// keep reporting the last-observed depth/running values forever.
+			deleteQueueMetrics(req.Name, req.Namespace)
+
 			return ctrl.Result{}, nil
 		}
 
@@ -85,6 +89,10 @@ func (r *PipelineRunQueueReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	selector, err := metav1.LabelSelectorAsSelector(&queue.Spec.Selector)
 	if err != nil {
 		log.Error(err, "Invalid PipelineRunQueue selector", "queue", queue.Name, "namespace", queue.Namespace)
+
+		// Lanes derived under the old selector are no longer being observed;
+		// drop their gauge series rather than freezing stale values.
+		deleteQueueMetrics(queue.Name, queue.Namespace)
 
 		if updateErr := r.markInvalidSelector(ctx, queue, err); updateErr != nil {
 			return ctrl.Result{}, updateErr
