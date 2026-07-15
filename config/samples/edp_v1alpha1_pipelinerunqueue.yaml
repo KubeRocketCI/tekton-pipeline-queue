@@ -1,0 +1,9 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  labels:
+    app.kubernetes.io/name: tekton-pipeline-queue
+    app.kubernetes.io/managed-by: kustomize
+  name: pipelinerunqueue-sample
+spec:
+  # TODO(user): Add fields here
