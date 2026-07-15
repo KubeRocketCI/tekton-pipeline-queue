@@ -4,8 +4,9 @@ on:
     tags:
       - 'v*'
 
+# create-release needs write access to publish the GitHub release.
 permissions:
-  contents: read
+  contents: write
 
 env:
     GOLANG_VERSION: '1.26'
