@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/pr.yaml/badge.svg)](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/pr.yaml)
 [![E2E](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/e2e.yaml/badge.svg)](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/e2e.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/KubeRocketCI/tekton-pipeline-queue)](https://goreportcard.com/report/github.com/KubeRocketCI/tekton-pipeline-queue)
 [![Go Reference](https://pkg.go.dev/badge/github.com/KubeRocketCI/tekton-pipeline-queue.svg)](https://pkg.go.dev/github.com/KubeRocketCI/tekton-pipeline-queue)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 

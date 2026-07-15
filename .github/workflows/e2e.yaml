@@ -1,6 +1,21 @@
 name: "Run End-to-end tests"
 
+# Path-filtered on purpose: documentation-only changes must not spend a
+# Kind cluster with a full Tekton install. If e2e-tests-check ever becomes
+# a required branch-protection check, drop the filters - a path-skipped
+# required check blocks merging forever.
 on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'Makefile'
+      - 'deploy-templates/**'
+      - 'tests/e2e/chainsaw/**'
+      - '.github/workflows/e2e.yaml'
   pull_request:
     branches: [main]
     paths:
