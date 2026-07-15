@@ -157,7 +157,7 @@ func (r *PipelineRunQueueReconciler) applyLanes(
 		handled := make(map[string]bool, len(admit)+len(cancel))
 
 		for _, pr := range cancel {
-			if err := r.cancelRun(ctx, pr); err != nil {
+			if err := r.cancelRun(ctx, pr, queue.Name, key); err != nil {
 				log.Error(err, "Failed to cancel PipelineRun", "lane", key, "pipelineRun", pr.Name)
 				continue
 			}
@@ -169,7 +169,7 @@ func (r *PipelineRunQueueReconciler) applyLanes(
 		}
 
 		for _, pr := range admit {
-			if err := r.admitRun(ctx, pr); err != nil {
+			if err := r.admitRun(ctx, pr, queue.Name, key); err != nil {
 				log.Error(err, "Failed to admit PipelineRun", "lane", key, "pipelineRun", pr.Name)
 				continue
 			}
@@ -231,17 +231,27 @@ func effectiveQueuedNames(queued []*tektonv1.PipelineRun, handled map[string]boo
 	return names
 }
 
-// cancelRun asks pr to gracefully cancel by patching spec.status. Runs that
-// are already done or already cancelling are skipped; bucketLanes never
-// classifies such runs as occupying/queued in the first place, so this is a
-// defensive no-op rather than the common path.
-func (r *PipelineRunQueueReconciler) cancelRun(ctx context.Context, pr *tektonv1.PipelineRun) error {
+// cancelRun asks pr to gracefully cancel by patching spec.status, stamping
+// the actor annotations in the same patch. Runs that are already done or
+// already cancelling are skipped; bucketLanes never classifies such runs as
+// occupying/queued in the first place, so this is a defensive no-op rather
+// than the common path.
+func (r *PipelineRunQueueReconciler) cancelRun(
+	ctx context.Context,
+	pr *tektonv1.PipelineRun,
+	queueName, lane string,
+) error {
 	if pr.IsDone() || isCancelling(pr) {
 		return nil
 	}
 
 	patch := client.MergeFrom(pr.DeepCopy())
 	pr.Spec.Status = tektonv1.PipelineRunSpecStatusCancelledRunFinally
+	setAnnotations(pr, map[string]string{
+		edpv1alpha1.AnnotationQueue:             queueName,
+		edpv1alpha1.AnnotationQueueLane:         lane,
+		edpv1alpha1.AnnotationQueueCancelReason: edpv1alpha1.CancelReasonSuperseded,
+	})
 
 	if err := r.Patch(ctx, pr, patch); err != nil {
 		return fmt.Errorf("failed to patch PipelineRun %s/%s to CancelledRunFinally: %w", pr.Namespace, pr.Name, err)
@@ -250,16 +260,36 @@ func (r *PipelineRunQueueReconciler) cancelRun(ctx context.Context, pr *tektonv1
 	return nil
 }
 
-// admitRun clears spec.status on pr so Tekton starts running it.
-func (r *PipelineRunQueueReconciler) admitRun(ctx context.Context, pr *tektonv1.PipelineRun) error {
+// admitRun clears spec.status on pr so Tekton starts running it, stamping
+// the actor annotations in the same patch.
+func (r *PipelineRunQueueReconciler) admitRun(
+	ctx context.Context,
+	pr *tektonv1.PipelineRun,
+	queueName, lane string,
+) error {
 	patch := client.MergeFrom(pr.DeepCopy())
 	pr.Spec.Status = ""
+	setAnnotations(pr, map[string]string{
+		edpv1alpha1.AnnotationQueue:           queueName,
+		edpv1alpha1.AnnotationQueueLane:       lane,
+		edpv1alpha1.AnnotationQueueAdmittedAt: time.Now().UTC().Format(time.RFC3339),
+	})
 
 	if err := r.Patch(ctx, pr, patch); err != nil {
 		return fmt.Errorf("failed to patch PipelineRun %s/%s to clear pending status: %w", pr.Namespace, pr.Name, err)
 	}
 
 	return nil
+}
+
+// setAnnotations merges kv into pr's annotations, initializing the map when
+// the run has none.
+func setAnnotations(pr *tektonv1.PipelineRun, kv map[string]string) {
+	if pr.Annotations == nil {
+		pr.Annotations = make(map[string]string, len(kv))
+	}
+
+	maps.Copy(pr.Annotations, kv)
 }
 
 // markInvalidSelector sets a False Ready condition on queue explaining why

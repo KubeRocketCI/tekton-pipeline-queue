@@ -126,6 +126,15 @@ make install          # CRDs
 make deploy IMG=docker.io/epamedp/tekton-pipeline-queue:<tag>
 ```
 
+## Annotations
+
+The operator stamps every PipelineRun it acts on, in the same patch that
+changes `spec.status`: `app.edp.epam.com/queue`, `.../queue-lane`, and
+`.../queue-admitted-at` on admission; `.../queue`, `.../queue-lane`, and
+`.../queue-cancel-reason: superseded` on cancellation. A run without these
+annotations was never touched by the queue. How to read them, use-case
+recipes, and debugging steps: [docs/debugging.md](docs/debugging.md).
+
 ## Metrics
 
 Prometheus metrics exposed by the controller:
@@ -148,7 +157,8 @@ make manifests        # regenerate CRDs (config/crd/bases + deploy-templates/crd
 make helm-docs        # regenerate deploy-templates/README.md
 ```
 
-API reference: [docs/api.md](docs/api.md). Chart values:
+API reference: [docs/api.md](docs/api.md). Use cases and debugging:
+[docs/debugging.md](docs/debugging.md). Chart values:
 [deploy-templates/README.md](deploy-templates/README.md).
 
 ## License

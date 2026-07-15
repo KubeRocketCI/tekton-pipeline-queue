@@ -87,6 +87,15 @@ var _ = Describe("PipelineRunQueue admission controller", func() {
 			WithTransform(func(l *edpv1alpha1.LaneStatus) []string { return l.Running }, ConsistOf(runs[0].Name)),
 			WithTransform(func(l *edpv1alpha1.LaneStatus) []string { return l.Queued }, Equal([]string{runs[1].Name, runs[2].Name})),
 		))
+
+		// The admit patch stamps the actor annotations; a run that is merely
+		// waiting carries none.
+		admitted := getAnnotations(namespace, runs[0].Name)
+		Expect(admitted).To(HaveKeyWithValue(edpv1alpha1.AnnotationQueue, "fifo"))
+		Expect(admitted).To(HaveKeyWithValue(edpv1alpha1.AnnotationQueueLane, ""))
+		Expect(admitted).To(HaveKey(edpv1alpha1.AnnotationQueueAdmittedAt))
+		Expect(admitted).NotTo(HaveKey(edpv1alpha1.AnnotationQueueCancelReason))
+		Expect(getAnnotations(namespace, runs[1].Name)).NotTo(HaveKey(edpv1alpha1.AnnotationQueue))
 	})
 
 	It("promotes the next queued run once the admitted run completes", func() {
@@ -148,6 +157,14 @@ var _ = Describe("PipelineRunQueue admission controller", func() {
 		expectSpecStatus(namespace, queuedRuns[1].Name, tektonv1.PipelineRunSpecStatusCancelledRunFinally)
 		expectSpecStatus(namespace, queuedRuns[2].Name, tektonv1.PipelineRunSpecStatusPending)
 		expectSpecStatus(namespace, running.Name, "")
+
+		// The cancel patch stamps the actor annotations with the reason; the
+		// admitted-at annotation belongs to admission only.
+		cancelled := getAnnotations(namespace, queuedRuns[0].Name)
+		Expect(cancelled).To(HaveKeyWithValue(edpv1alpha1.AnnotationQueue, laneName))
+		Expect(cancelled).To(HaveKeyWithValue(edpv1alpha1.AnnotationQueueLane, ""))
+		Expect(cancelled).To(HaveKeyWithValue(edpv1alpha1.AnnotationQueueCancelReason, edpv1alpha1.CancelReasonSuperseded))
+		Expect(cancelled).NotTo(HaveKey(edpv1alpha1.AnnotationQueueAdmittedAt))
 	})
 
 	It("frees the lane slot as soon as a running run is flagged for cancellation, without waiting for a terminal condition", func() {
@@ -246,6 +263,15 @@ func expectSpecStatus(namespace, name string, want tektonv1.PipelineRunSpecStatu
 
 		return pr.Spec.Status
 	}, testTimeout, testInterval).Should(Equal(want))
+}
+
+func getAnnotations(namespace, name string) map[string]string {
+	GinkgoHelper()
+
+	pr := &tektonv1.PipelineRun{}
+	Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pr)).To(Succeed())
+
+	return pr.Annotations
 }
 
 func patchSpecStatus(namespace, name string, status tektonv1.PipelineRunSpecStatus) {
