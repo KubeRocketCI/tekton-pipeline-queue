@@ -28,10 +28,12 @@ import (
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 
@@ -74,7 +76,10 @@ var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
 
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "hack", "crd"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -91,6 +96,26 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	// Start a manager with the reconciler registered so watches actually
+	// drive admissions/cancellations, rather than only exercising Reconcile
+	// via direct, single-shot calls.
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:  scheme.Scheme,
+		Metrics: metricsserver.Options{BindAddress: "0"},
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	Expect((&PipelineRunQueueReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr)).To(Succeed())
+
+	go func() {
+		defer GinkgoRecover()
+
+		Expect(mgr.Start(ctx)).To(Succeed())
+	}()
 })
 
 var _ = AfterSuite(func() {

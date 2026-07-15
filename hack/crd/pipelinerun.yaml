@@ -1,0 +1,143 @@
+# Trimmed Tekton PipelineRun CRD for envtest only. Not the full upstream
+# schema - just enough for the queue controller's tests to create runs, set
+# spec.status/pipelineRef/params, and observe/patch status.conditions.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: pipelineruns.tekton.dev
+  labels:
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/part-of: tekton-pipelines
+    pipeline.tekton.dev/release: "devel"
+    version: "devel"
+spec:
+  group: tekton.dev
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: PipelineRun represents a single execution of a Pipeline.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: PipelineRunSpec defines the desired state of PipelineRun
+              type: object
+              properties:
+                status:
+                  description: |-
+                    Status is used for cancelling a pipelinerun (and maybe more later on)
+                    One of PipelineRunPending, PipelineRunCancelled, CancelledRunFinally,
+                    StoppedRunFinally.
+                  type: string
+                statusMessage:
+                  description: Status message for cancellation.
+                  type: string
+                timeouts:
+                  description: Timeouts defines the different timeouts that should be enforced on the PipelineRun.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                pipelineRef:
+                  description: PipelineRef can be used to refer to a specific instance of a Pipeline.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                pipelineSpec:
+                  description: PipelineSpec defines the desired state of Pipeline, embedded directly.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                params:
+                  description: Params is a list of parameter names and values.
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  x-kubernetes-list-type: atomic
+                serviceAccountName:
+                  type: string
+                workspaces:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  x-kubernetes-list-type: atomic
+                taskRunTemplate:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              description: PipelineRunStatus defines the observed state of PipelineRun
+              type: object
+              properties:
+                annotations:
+                  type: object
+                  additionalProperties:
+                    type: string
+                completionTime:
+                  type: string
+                  format: date-time
+                startTime:
+                  type: string
+                  format: date-time
+                conditions:
+                  description: Conditions the latest available observations of a resource's current state.
+                  type: array
+                  items:
+                    description: |-
+                      Condition defines a readiness condition for a Knative resource.
+                      See: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+                    type: object
+                    required:
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                      message:
+                        type: string
+                      reason:
+                        type: string
+                      severity:
+                        type: string
+                      status:
+                        description: Status of the condition, one of True, False, Unknown.
+                        type: string
+                      type:
+                        description: Type of condition.
+                        type: string
+                observedGeneration:
+                  type: integer
+                  format: int64
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+        - name: Succeeded
+          type: string
+          jsonPath: ".status.conditions[?(@.type==\"Succeeded\")].status"
+        - name: Reason
+          type: string
+          jsonPath: ".status.conditions[?(@.type==\"Succeeded\")].reason"
+        - name: StartTime
+          type: date
+          jsonPath: .status.startTime
+        - name: CompletionTime
+          type: date
+          jsonPath: .status.completionTime
+      # Opt into the status subresource so metadata.generation
+      # starts to increment and status can be updated independently of spec.
+      subresources:
+        status: {}
+  names:
+    kind: PipelineRun
+    plural: pipelineruns
+    singular: pipelinerun
+    categories:
+      - tekton
+      - tekton-pipelines
+  scope: Namespaced
