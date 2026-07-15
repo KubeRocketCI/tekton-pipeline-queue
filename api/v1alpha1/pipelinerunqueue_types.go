@@ -24,11 +24,9 @@ import (
 // Condition types set on PipelineRunQueue.status.conditions.
 const (
 	// ConditionReady indicates the queue is reconciled and its lane projection
-	// reflects the current live PipelineRun set.
+	// reflects the current live PipelineRun set. False with reason
+	// InvalidSelector means the queue is inert until its spec is fixed.
 	ConditionReady = "Ready"
-	// ConditionDegraded indicates the controller could not fully reconcile the
-	// queue (e.g. an invalid selector or a failed admission update).
-	ConditionDegraded = "Degraded"
 )
 
 // QueueStrategy controls how a lane reacts to the arrival of a newer PipelineRun.
@@ -92,8 +90,8 @@ type PipelineRunQueueStatus struct {
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
 	// Standard condition types include:
-	// - "Ready": the queue is reconciled and its lane projection is up to date
-	// - "Degraded": the controller failed to reach or maintain the desired state
+	// - "Ready": the queue is reconciled and its lane projection is up to date;
+	//   False with reason InvalidSelector means the queue is inert until fixed
 	//
 	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map

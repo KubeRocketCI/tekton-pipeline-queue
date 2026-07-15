@@ -60,9 +60,8 @@ type PipelineRunQueueReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=edp.epam.com,resources=pipelinerunqueues,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=edp.epam.com,resources=pipelinerunqueues/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=edp.epam.com,resources=pipelinerunqueues/finalizers,verbs=update
+// +kubebuilder:rbac:groups=edp.epam.com,resources=pipelinerunqueues,verbs=get;list;watch
+// +kubebuilder:rbac:groups=edp.epam.com,resources=pipelinerunqueues/status,verbs=get;patch
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -110,6 +109,8 @@ func (r *PipelineRunQueueReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, fmt.Errorf("failed to list PipelineRuns: %w", err)
 	}
 
+	// The CRD schema enforces default=1/minimum=1, so this is defense-in-depth
+	// for callers that bypass API validation (unit tests, fake clients).
 	concurrency := queue.Spec.Concurrency
 	if concurrency <= 0 {
 		concurrency = 1
@@ -309,6 +310,12 @@ func (r *PipelineRunQueueReconciler) markInvalidSelector(
 		Message:            cause.Error(),
 		ObservedGeneration: queue.Generation,
 	})
+	// Lanes derived under the old selector are no longer being observed;
+	// clear the projection like the gauge metrics, rather than freezing
+	// last-good counts next to a False Ready condition.
+	queue.Status.Lanes = nil
+	queue.Status.QueuedCount = 0
+	queue.Status.RunningCount = 0
 	queue.Status.ObservedGeneration = queue.Generation
 
 	if err := r.Status().Patch(ctx, queue, client.MergeFrom(base)); err != nil {

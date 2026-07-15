@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -64,6 +64,10 @@ func laneLabels(value string) map[string]string {
 var _ = Describe("PipelineRunQueue admission controller", func() {
 	var namespace string
 
+	// Each spec gets a fresh namespace for isolation. There is deliberately no
+	// cleanup: envtest runs no namespace controller, so deletion would only
+	// park namespaces in Terminating; the whole environment is torn down in
+	// AfterSuite anyway.
 	BeforeEach(func() {
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "prq-test-"}}
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
@@ -195,6 +199,42 @@ var _ = Describe("PipelineRunQueue admission controller", func() {
 		expectSpecStatus(namespace, runs[0].Name, "")
 		expectSpecStatus(namespace, runs[1].Name, "")
 	})
+
+	It("marks a queue with an invalid selector not ready and clears its projection", func() {
+		queue := newQueue("invalid", namespace, laneLabels("invalid"), nil, 1, edpv1alpha1.QueueStrategyQueue)
+		Expect(k8sClient.Create(ctx, queue)).To(Succeed())
+
+		run := newPipelineRun("invalid-run", namespace, laneLabels("invalid"), false)
+		Expect(k8sClient.Create(ctx, run)).To(Succeed())
+
+		Eventually(func() int32 {
+			q := &edpv1alpha1.PipelineRunQueue{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "invalid"}, q)).To(Succeed())
+
+			return q.Status.RunningCount
+		}, testTimeout, testInterval).Should(Equal(int32(1)))
+
+		// An unparseable matchExpressions operator passes CRD schema
+		// validation but fails LabelSelectorAsSelector at reconcile time.
+		patch := client.MergeFrom(queue.DeepCopy())
+		queue.Spec.Selector = metav1.LabelSelector{
+			MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "k", Operator: "Bogus"}},
+		}
+		Expect(k8sClient.Patch(ctx, queue, patch)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			q := &edpv1alpha1.PipelineRunQueue{}
+			g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "invalid"}, q)).To(Succeed())
+
+			ready := apimeta.FindStatusCondition(q.Status.Conditions, edpv1alpha1.ConditionReady)
+			g.Expect(ready).NotTo(BeNil())
+			g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(ready.Reason).To(Equal(reasonInvalidSelector))
+			g.Expect(q.Status.Lanes).To(BeEmpty())
+			g.Expect(q.Status.RunningCount).To(BeZero())
+			g.Expect(q.Status.QueuedCount).To(BeZero())
+		}, testTimeout, testInterval).Should(Succeed())
+	})
 })
 
 func newQueue(
@@ -303,7 +343,7 @@ func markSucceeded(namespace, name string) {
 // exist.
 func laneStatus(namespace, queueName, key string) *edpv1alpha1.LaneStatus {
 	queue := &edpv1alpha1.PipelineRunQueue{}
-	if err := k8sClient.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: queueName}, queue); err != nil {
+	if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: queueName}, queue); err != nil {
 		return nil
 	}
 

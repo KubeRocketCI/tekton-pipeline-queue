@@ -11,19 +11,9 @@ rules:
   resources:
   - pipelinerunqueues
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - edp.epam.com
-  resources:
-  - pipelinerunqueues/finalizers
-  verbs:
-  - update
 - apiGroups:
   - edp.epam.com
   resources:
@@ -31,7 +21,6 @@ rules:
   verbs:
   - get
   - patch
-  - update
 - apiGroups:
   - tekton.dev
   resources:
