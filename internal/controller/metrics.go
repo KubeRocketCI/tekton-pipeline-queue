@@ -80,12 +80,23 @@ func init() {
 	)
 }
 
-// resetLaneMetrics drops every depth/running gauge series previously
-// exported for queue. The caller re-Sets the current lanes right after,
-// which keeps stale (disappeared) lanes from lingering in exported metrics
-// without having to diff against the previous reconcile's lane set.
-func resetLaneMetrics(queue *edpv1alpha1.PipelineRunQueue) {
-	deleteQueueMetrics(queue.Name, queue.Namespace)
+// deleteStaleLaneMetrics drops the depth/running gauge series of lanes that
+// appeared in the queue's previous status projection but are absent from the
+// freshly derived lane set. Exact-match deletes avoid the vector-wide
+// lock-and-scan that DeletePartialMatch performs, which matters because this
+// runs on every reconcile; the full sweep (deleteQueueMetrics) is reserved
+// for the rare queue-deletion and invalid-selector paths, which also catch
+// any lane a failed status write kept out of the projection.
+func deleteStaleLaneMetrics(queue *edpv1alpha1.PipelineRunQueue, current map[string]*lane) {
+	for i := range queue.Status.Lanes {
+		key := queue.Status.Lanes[i].Key
+		if _, ok := current[key]; ok {
+			continue
+		}
+
+		queueDepth.DeleteLabelValues(queue.Name, queue.Namespace, key)
+		queueRunning.DeleteLabelValues(queue.Name, queue.Namespace, key)
+	}
 }
 
 // deleteQueueMetrics removes all depth/running gauge series for a queue.

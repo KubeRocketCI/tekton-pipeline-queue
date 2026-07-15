@@ -71,6 +71,30 @@ func isOccupying(pr *tektonv1.PipelineRun) bool {
 	return !isQueued(pr) && !isCancelling(pr) && !pr.IsDone()
 }
 
+// runBucket is a run's admission-relevant classification. It exists so that
+// every layer asking "what state is this run in for admission purposes" —
+// bucketing and the watch predicate alike — goes through the same
+// isQueued/isCancelling/isOccupying semantics instead of re-deriving them.
+type runBucket int
+
+const (
+	bucketIgnored runBucket = iota // done, cancelled, or cancelling
+	bucketQueued
+	bucketOccupying
+)
+
+// bucketOf classifies pr into its admission bucket.
+func bucketOf(pr *tektonv1.PipelineRun) runBucket {
+	switch {
+	case isQueued(pr):
+		return bucketQueued
+	case isOccupying(pr):
+		return bucketOccupying
+	default:
+		return bucketIgnored
+	}
+}
+
 // bucketLanes partitions runs into per-lane occupying/queued buckets keyed by
 // laneKey(run, queueKey). Runs that are neither occupying nor queued (done,
 // cancelled, cancelling) are ignored. The queued bucket of each lane is

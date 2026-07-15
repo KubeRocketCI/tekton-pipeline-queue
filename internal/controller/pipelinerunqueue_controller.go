@@ -139,7 +139,7 @@ func (r *PipelineRunQueueReconciler) applyLanes(
 ) (statusLanes []edpv1alpha1.LaneStatus, queuedTotal, runningTotal int32) {
 	log := logf.FromContext(ctx)
 
-	resetLaneMetrics(queue)
+	deleteStaleLaneMetrics(queue, lanes)
 
 	keys := make([]string, 0, len(lanes))
 	for key := range lanes {
@@ -390,7 +390,8 @@ func (r *PipelineRunQueueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // pipelineRunPredicate filters PipelineRun watch events down to the ones
 // that can actually change a queue's admission decision: creation, deletion,
-// or an update that changed spec.status, done-ness, or labels (which affect
+// or an update that moved the run between admission buckets (via bucketOf,
+// the same classification bucketLanes uses) or changed labels (which affect
 // selector matching and lane identity). Everything else (e.g. status
 // message churn while running) is dropped to avoid needless reconciles.
 var pipelineRunPredicate = predicate.Funcs{
@@ -407,11 +408,7 @@ var pipelineRunPredicate = predicate.Funcs{
 			return true
 		}
 
-		if oldPR.Spec.Status != newPR.Spec.Status {
-			return true
-		}
-
-		if oldPR.IsDone() != newPR.IsDone() {
+		if bucketOf(oldPR) != bucketOf(newPR) {
 			return true
 		}
 

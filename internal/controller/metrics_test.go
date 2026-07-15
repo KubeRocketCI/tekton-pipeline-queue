@@ -20,6 +20,9 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	edpv1alpha1 "github.com/KubeRocketCI/tekton-pipeline-queue/api/v1alpha1"
 )
 
 func TestDeleteQueueMetrics(t *testing.T) {
@@ -44,4 +47,29 @@ func TestDeleteQueueMetrics(t *testing.T) {
 	if got := testutil.CollectAndCount(queueDepth); got != 0 {
 		t.Errorf("expected 0 remaining queueDepth series, got %d", got)
 	}
+}
+
+func TestDeleteStaleLaneMetrics(t *testing.T) {
+	queue := &edpv1alpha1.PipelineRunQueue{
+		ObjectMeta: metav1.ObjectMeta{Name: "q3", Namespace: "ns3"},
+		Status: edpv1alpha1.PipelineRunQueueStatus{
+			Lanes: []edpv1alpha1.LaneStatus{{Key: "gone"}, {Key: "kept"}},
+		},
+	}
+
+	queueDepth.WithLabelValues("q3", "ns3", "gone").Set(2)
+	queueDepth.WithLabelValues("q3", "ns3", "kept").Set(1)
+	queueRunning.WithLabelValues("q3", "ns3", "gone").Set(1)
+
+	deleteStaleLaneMetrics(queue, map[string]*lane{"kept": {}})
+
+	if got := testutil.CollectAndCount(queueDepth); got != 1 {
+		t.Errorf("expected only the kept lane's queueDepth series, got %d", got)
+	}
+
+	if got := testutil.CollectAndCount(queueRunning); got != 0 {
+		t.Errorf("expected the stale queueRunning series removed, got %d", got)
+	}
+
+	deleteQueueMetrics("q3", "ns3")
 }
