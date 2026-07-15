@@ -1,0 +1,24 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: replace-queued
+spec:
+  description: >
+    Under the ReplaceQueued strategy, only the newest queued run survives:
+    older queued runs are cancelled (CancelledRunFinally, reason superseded)
+    while an already-running occupying run is left untouched.
+  steps:
+  - name: create-queue-occupying-and-queued-runs
+    try:
+    - apply:
+        file: queue.yaml
+    - apply:
+        file: occupying-run.yaml
+    - apply:
+        file: queued-runs.yaml
+    - assert:
+        file: assert-occupying-untouched.yaml
+    - assert:
+        file: assert-cancelled.yaml
+    - assert:
+        file: assert-newest-still-queued.yaml

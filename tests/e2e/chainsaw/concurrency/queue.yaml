@@ -1,0 +1,10 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: concurrency-queue
+spec:
+  selector:
+    matchLabels:
+      test: concurrency
+  concurrency: 2
+  strategy: Queue

@@ -1,0 +1,23 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: fifo-admission
+spec:
+  description: >
+    A queue with concurrency 1 and no queueKey admits pending PipelineRuns
+    strictly FIFO: only the oldest run is admitted (spec.status cleared,
+    queue/queue-lane/queue-admitted-at annotations stamped), the rest stay
+    Pending and untouched.
+  steps:
+  - name: create-queue-and-runs
+    try:
+    - apply:
+        file: queue.yaml
+    - apply:
+        file: runs.yaml
+    - assert:
+        file: assert-admitted.yaml
+    - assert:
+        file: assert-queued.yaml
+    - assert:
+        file: assert-queue-status.yaml

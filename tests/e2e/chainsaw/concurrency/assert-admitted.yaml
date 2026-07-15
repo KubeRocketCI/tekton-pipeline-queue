@@ -1,0 +1,13 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-1
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue" == 'concurrency-queue'): true
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue" == 'concurrency-queue'): true

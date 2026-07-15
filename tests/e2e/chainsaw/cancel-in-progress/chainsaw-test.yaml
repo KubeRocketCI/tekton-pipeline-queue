@@ -1,0 +1,27 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cancel-in-progress
+spec:
+  description: >
+    Under the CancelInProgress strategy, a newer arrival in the same lane
+    preempts an already-running older occupying run: run-1 is admitted
+    first, then run-2 arrives and run-1 is cancelled (superseded) while
+    run-2 is admitted in its place.
+  steps:
+  - name: create-queue-and-first-run
+    try:
+    - apply:
+        file: queue.yaml
+    - apply:
+        file: run-1.yaml
+    - assert:
+        file: assert-run-1-admitted.yaml
+  - name: second-run-preempts-first
+    try:
+    - apply:
+        file: run-2.yaml
+    - assert:
+        file: assert-run-1-cancelled.yaml
+    - assert:
+        file: assert-run-2-admitted.yaml

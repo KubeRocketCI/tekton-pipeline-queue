@@ -1,0 +1,9 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-1
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue" == 'fifo-queue'): true
+(metadata.annotations."app.edp.epam.com/queue-lane" == ''): true
+(metadata.annotations."app.edp.epam.com/queue-admitted-at" != null): true
+(metadata.annotations."app.edp.epam.com/queue-cancel-reason" == null): true

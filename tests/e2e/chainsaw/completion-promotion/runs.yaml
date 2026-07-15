@@ -1,0 +1,36 @@
+# Both runs finish fast ('true') since this scenario asserts the queue
+# promotes run-2 only after run-1 genuinely completes on the real Tekton
+# controller, not just after being admitted.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-1
+  labels:
+    test: completion-promotion
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: quick
+      taskSpec:
+        steps:
+        - name: run
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "true"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+  labels:
+    test: completion-promotion
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: quick
+      taskSpec:
+        steps:
+        - name: run
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "true"]

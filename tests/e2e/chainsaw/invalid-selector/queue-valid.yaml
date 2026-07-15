@@ -1,0 +1,15 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: invalid-selector-queue
+spec:
+  selector:
+    matchLabels:
+      test: invalid-selector
+    # Explicit null: CRDs only support JSON Merge Patch semantics for
+    # kubectl/chainsaw apply, which never deletes a field that is simply
+    # absent from the new manifest. Without this, re-applying this file
+    # over queue-invalid.yaml would leave its matchExpressions in place.
+    matchExpressions: null
+  concurrency: 1
+  strategy: Queue

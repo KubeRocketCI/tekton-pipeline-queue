@@ -1,0 +1,10 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: fifo-queue
+spec:
+  selector:
+    matchLabels:
+      test: fifo-admission
+  concurrency: 1
+  strategy: Queue

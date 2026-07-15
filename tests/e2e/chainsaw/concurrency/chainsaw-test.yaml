@@ -1,0 +1,21 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: concurrency
+spec:
+  description: >
+    A queue with concurrency 2 admits the two oldest pending PipelineRuns
+    in a lane and leaves the third one Pending.
+  steps:
+  - name: create-queue-and-runs
+    try:
+    - apply:
+        file: queue.yaml
+    - apply:
+        file: runs.yaml
+    - assert:
+        file: assert-admitted.yaml
+    - assert:
+        file: assert-queued.yaml
+    - assert:
+        file: assert-queue-status.yaml

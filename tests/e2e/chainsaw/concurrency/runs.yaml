@@ -1,0 +1,53 @@
+# Named/ordered run-1 < run-2 < run-3 so the FIFO tiebreak (name, used when
+# creationTimestamp collides within its 1s resolution) matches the intended
+# admission order: run-1 and run-2 admitted, run-3 stays queued.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-1
+  labels:
+    test: concurrency
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+  labels:
+    test: concurrency
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-3
+  labels:
+    test: concurrency
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]

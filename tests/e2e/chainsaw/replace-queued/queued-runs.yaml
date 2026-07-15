@@ -1,0 +1,53 @@
+# Named/ordered queued-1 < queued-2 < queued-3 (oldest to newest) so the
+# FIFO tiebreak matches intent: ReplaceQueued keeps only queued-3 (the
+# newest) and cancels queued-1/queued-2.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: queued-1
+  labels:
+    test: replace-queued
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: queued-2
+  labels:
+    test: replace-queued
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: queued-3
+  labels:
+    test: replace-queued
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]

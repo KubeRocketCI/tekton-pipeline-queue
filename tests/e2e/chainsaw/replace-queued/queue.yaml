@@ -1,0 +1,10 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: replace-queued-queue
+spec:
+  selector:
+    matchLabels:
+      test: replace-queued
+  concurrency: 1
+  strategy: ReplaceQueued

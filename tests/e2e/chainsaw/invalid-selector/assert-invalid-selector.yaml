@@ -1,0 +1,14 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: invalid-selector-queue
+status:
+  conditions:
+  - type: Ready
+    status: "False"
+    reason: InvalidSelector
+# runningCount/queuedCount/lanes are all `,omitempty` and zeroed out by
+# markInvalidSelector, so they are omitted from the JSON entirely.
+(status.runningCount == null || status.runningCount == `0`): true
+(status.queuedCount == null || status.queuedCount == `0`): true
+(status.lanes == null): true

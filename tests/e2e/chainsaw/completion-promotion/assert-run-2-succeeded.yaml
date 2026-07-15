@@ -1,0 +1,8 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+status:
+  conditions:
+  - type: Succeeded
+    status: "True"

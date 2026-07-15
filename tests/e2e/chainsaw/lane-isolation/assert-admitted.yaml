@@ -1,0 +1,13 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-lane-a
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue-lane" == 'a'): true
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-lane-b
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue-lane" == 'b'): true

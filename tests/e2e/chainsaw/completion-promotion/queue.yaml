@@ -1,0 +1,10 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: completion-promotion-queue
+spec:
+  selector:
+    matchLabels:
+      test: completion-promotion
+  concurrency: 1
+  strategy: Queue

@@ -1,0 +1,73 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: crd-validation
+spec:
+  description: >
+    The CRD's OpenAPI schema rejects structurally invalid PipelineRunQueues
+    (concurrency below the minimum, an unknown strategy, a missing
+    required selector) before they ever reach the controller.
+  steps:
+  - name: concurrency-zero-is-rejected
+    try:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          kubectl apply -n $NAMESPACE -f - <<'EOF'
+          apiVersion: edp.epam.com/v1alpha1
+          kind: PipelineRunQueue
+          metadata:
+            name: zero-concurrency-queue
+          spec:
+            selector:
+              matchLabels:
+                test: crd-validation
+            concurrency: 0
+            strategy: Queue
+          EOF
+        check:
+          ($error != null): true
+          (contains($stderr, 'spec.concurrency')): true
+
+  - name: unknown-strategy-is-rejected
+    try:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          kubectl apply -n $NAMESPACE -f - <<'EOF'
+          apiVersion: edp.epam.com/v1alpha1
+          kind: PipelineRunQueue
+          metadata:
+            name: bad-strategy-queue
+          spec:
+            selector:
+              matchLabels:
+                test: crd-validation
+            strategy: Nonsense
+          EOF
+        check:
+          ($error != null): true
+          (contains($stderr, 'spec.strategy')): true
+
+  - name: missing-selector-is-rejected
+    try:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          kubectl apply -n $NAMESPACE -f - <<'EOF'
+          apiVersion: edp.epam.com/v1alpha1
+          kind: PipelineRunQueue
+          metadata:
+            name: no-selector-queue
+          spec:
+            strategy: Queue
+          EOF
+        check:
+          ($error != null): true
+          (contains($stderr, 'selector')): true

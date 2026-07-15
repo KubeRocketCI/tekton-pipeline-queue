@@ -1,0 +1,32 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: completion-promotion
+spec:
+  description: >
+    A concurrency-1 queue admits the oldest pending run; once it actually
+    finishes on the real Tekton controller and frees the lane slot, the
+    queue promotes the next queued run on a later reconcile.
+  steps:
+  - name: create-queue-and-runs
+    try:
+    - apply:
+        file: queue.yaml
+    - apply:
+        file: runs.yaml
+  - name: run-1-admitted-and-succeeds
+    try:
+    - assert:
+        timeout: 30s
+        file: assert-run-1-admitted.yaml
+    - assert:
+        timeout: 3m
+        file: assert-run-1-succeeded.yaml
+  - name: run-2-promoted-and-succeeds
+    try:
+    - assert:
+        timeout: 30s
+        file: assert-run-2-admitted.yaml
+    - assert:
+        timeout: 3m
+        file: assert-run-2-succeeded.yaml

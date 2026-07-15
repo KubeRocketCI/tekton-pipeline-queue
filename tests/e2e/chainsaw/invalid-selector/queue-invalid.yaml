@@ -1,0 +1,16 @@
+# "Bogus" passes the CRD's schema (LabelSelectorRequirement.operator is a
+# plain string, not enum-restricted) but is not one of the operators
+# metav1.LabelSelectorAsSelector understands, so it fails at reconcile time.
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: invalid-selector-queue
+spec:
+  selector:
+    matchExpressions:
+      - key: test
+        operator: Bogus
+        values:
+          - invalid-selector
+  concurrency: 1
+  strategy: Queue

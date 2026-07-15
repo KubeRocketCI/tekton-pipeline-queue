@@ -1,0 +1,15 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: queued-1
+spec:
+  status: CancelledRunFinally
+(metadata.annotations."app.edp.epam.com/queue-cancel-reason" == 'superseded'): true
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: queued-2
+spec:
+  status: CancelledRunFinally
+(metadata.annotations."app.edp.epam.com/queue-cancel-reason" == 'superseded'): true

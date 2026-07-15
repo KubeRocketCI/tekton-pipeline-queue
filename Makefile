@@ -69,12 +69,10 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
-# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
+# e2e tests are Chainsaw-based (tests/e2e/chainsaw/), run against a real Kind
+# cluster with Tekton Pipelines and the operator installed via the Helm chart.
 # kubectl kuberc is disabled by default for test isolation; enable with:
 # - KUBECTL_KUBERC=true
-# CertManager is installed by default; skip with:
-# - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= tekton-pipeline-queue-test-e2e
 
 .PHONY: setup-test-e2e
@@ -91,10 +89,42 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
 	esac
 
+# TEKTON_VERSION must name a tag that publishes a "release.yaml" GitHub
+# release asset (github.com/tektoncd/pipeline/releases); the legacy
+# storage.googleapis.com/tekton-releases bucket stopped receiving uploads
+# after v1.6.0, so we install from the GitHub release asset instead.
+TEKTON_VERSION ?= v1.11.1
+TEKTON_NAMESPACE ?= tekton-pipelines
+
+.PHONY: install-tekton-e2e
+install-tekton-e2e: ## Install Tekton Pipelines into the e2e Kind cluster.
+	$(KUBECTL) --context kind-$(KIND_CLUSTER) apply -f \
+		https://github.com/tektoncd/pipeline/releases/download/$(TEKTON_VERSION)/release.yaml
+	$(KUBECTL) --context kind-$(KIND_CLUSTER) wait deployment --all \
+		--for=condition=Available --timeout=180s -n $(TEKTON_NAMESPACE)
+
+# TPQ_NAMESPACE is the namespace the operator itself is deployed into for
+# e2e; chainsaw test cases run in their own ephemeral namespaces (see
+# tests/e2e/chainsaw/.chainsaw.yaml) since the operator watches PipelineRuns
+# cluster-wide.
+TPQ_NAMESPACE ?= tpq-e2e
+E2E_IMG_REPO ?= tekton-pipeline-queue
+E2E_IMG_TAG := e2e-$(shell date +%s)
+
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
+test-e2e: setup-test-e2e manifests generate fmt vet chainsaw ## Run Chainsaw e2e tests against the Kind cluster. Does NOT delete the cluster afterwards - run 'make cleanup-test-e2e' manually (CI does this automatically).
+	$(MAKE) install-tekton-e2e
+	$(CONTAINER_TOOL) build -t $(E2E_IMG_REPO):$(E2E_IMG_TAG) .
+	$(KIND) load docker-image $(E2E_IMG_REPO):$(E2E_IMG_TAG) --name $(KIND_CLUSTER)
+	helm upgrade --install tekton-pipeline-queue-e2e deploy-templates \
+		--kube-context kind-$(KIND_CLUSTER) \
+		--namespace $(TPQ_NAMESPACE) --create-namespace \
+		--set image.registry= \
+		--set image.repository=$(E2E_IMG_REPO) \
+		--set image.tag=$(E2E_IMG_TAG) \
+		--wait --timeout 2m
+	"$(CHAINSAW)" test --config tests/e2e/chainsaw/.chainsaw.yaml tests/e2e/chainsaw \
+		--kube-context kind-$(KIND_CLUSTER)
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
@@ -219,6 +249,8 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 CRDOC ?= $(LOCALBIN)/crdoc
 HELMDOCS ?= $(LOCALBIN)/helm-docs
 GITCHGLOG ?= $(LOCALBIN)/git-chglog
+CHAINSAW_VERSION ?= v0.2.15
+CHAINSAW ?= $(LOCALBIN)/chainsaw-$(CHAINSAW_VERSION)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.8.1
@@ -285,6 +317,11 @@ $(HELMDOCS): $(LOCALBIN)
 git-chglog: $(GITCHGLOG) ## Download git-chglog locally if necessary.
 $(GITCHGLOG): $(LOCALBIN)
 	$(call go-install-tool,$(GITCHGLOG),github.com/git-chglog/git-chglog/cmd/git-chglog,$(GITCHGLOG_VERSION))
+
+.PHONY: chainsaw
+chainsaw: $(CHAINSAW) ## Download chainsaw locally if necessary.
+$(CHAINSAW): $(LOCALBIN)
+	$(call go-install-tool,$(LOCALBIN)/chainsaw,github.com/kyverno/chainsaw,$(CHAINSAW_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

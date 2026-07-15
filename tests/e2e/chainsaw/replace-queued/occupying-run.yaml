@@ -1,0 +1,17 @@
+# No spec.status: this run starts running immediately (occupies the lane's
+# only concurrency slot) before any of the queued runs below exist.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: occupying
+  labels:
+    test: replace-queued
+spec:
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]

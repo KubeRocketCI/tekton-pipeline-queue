@@ -1,0 +1,12 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: lane-isolation-queue
+spec:
+  selector:
+    matchLabels:
+      test: lane-isolation
+  queueKey:
+    - lane
+  concurrency: 1
+  strategy: Queue

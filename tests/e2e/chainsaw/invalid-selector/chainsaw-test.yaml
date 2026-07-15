@@ -1,0 +1,30 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: invalid-selector
+spec:
+  description: >
+    An unparseable spec.selector (valid against the CRD schema, invalid at
+    reconcile time) flips Ready to False/InvalidSelector and zeroes the
+    lane projection; fixing the selector recovers the queue.
+  steps:
+  - name: valid-selector-is-ready
+    try:
+    - apply:
+        file: queue-valid.yaml
+    - apply:
+        file: run.yaml
+    - assert:
+        file: assert-ready-running.yaml
+  - name: invalid-selector-flips-ready-false
+    try:
+    - apply:
+        file: queue-invalid.yaml
+    - assert:
+        file: assert-invalid-selector.yaml
+  - name: fixing-selector-recovers
+    try:
+    - apply:
+        file: queue-valid.yaml
+    - assert:
+        file: assert-ready-running.yaml

@@ -1,0 +1,12 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: invalid-selector-queue
+status:
+  runningCount: 1
+  conditions:
+  - type: Ready
+    status: "True"
+# queuedCount is `,omitempty` and 0 is its zero value, so it is omitted from
+# the JSON entirely rather than serialized as 0.
+(status.queuedCount == null || status.queuedCount == `0`): true

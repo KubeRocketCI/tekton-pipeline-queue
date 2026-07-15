@@ -1,0 +1,17 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: fifo-queue
+status:
+  queuedCount: 2
+  runningCount: 1
+  lanes:
+  - key: ""
+    running:
+    - run-1
+    queued:
+    - run-2
+    - run-3
+  conditions:
+  - type: Ready
+    status: "True"

@@ -1,0 +1,6 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: occupying
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue-cancel-reason" == null): true

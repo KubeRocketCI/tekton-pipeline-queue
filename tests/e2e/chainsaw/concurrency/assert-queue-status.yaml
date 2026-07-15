@@ -1,0 +1,14 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: concurrency-queue
+status:
+  queuedCount: 1
+  runningCount: 2
+  lanes:
+  - key: ""
+    running:
+    - run-1
+    - run-2
+    queued:
+    - run-3

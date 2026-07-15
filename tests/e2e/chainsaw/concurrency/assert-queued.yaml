@@ -1,0 +1,7 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-3
+spec:
+  status: PipelineRunPending
+(metadata.annotations."app.edp.epam.com/queue" == null): true

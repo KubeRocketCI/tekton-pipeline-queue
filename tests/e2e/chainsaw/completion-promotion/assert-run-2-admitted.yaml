@@ -1,0 +1,6 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+(spec.status == null): true
+(metadata.annotations."app.edp.epam.com/queue" == 'completion-promotion-queue'): true

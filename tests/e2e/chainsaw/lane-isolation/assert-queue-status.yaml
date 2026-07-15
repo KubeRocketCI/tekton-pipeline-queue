@@ -1,0 +1,10 @@
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: lane-isolation-queue
+status:
+  runningCount: 2
+# queuedCount is `,omitempty` and 0 is its zero value, so a fully-drained
+# queue omits the field from the JSON entirely rather than serializing 0.
+(status.queuedCount == null || status.queuedCount == `0`): true
+(length(status.lanes) == `2`): true

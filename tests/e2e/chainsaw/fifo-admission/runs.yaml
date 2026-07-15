@@ -1,0 +1,53 @@
+# creationTimestamp has 1-second resolution and the FIFO tiebreak is object
+# name, so run-1/run-2/run-3 are named (and ordered in this file) to match
+# the intended admission order even if all three land in the same second.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-1
+  labels:
+    test: fifo-admission
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-2
+  labels:
+    test: fifo-admission
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-3
+  labels:
+    test: fifo-admission
+spec:
+  status: PipelineRunPending
+  pipelineSpec:
+    tasks:
+    - name: sleeper
+      taskSpec:
+        steps:
+        - name: sleep
+          image: mirror.gcr.io/library/busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
