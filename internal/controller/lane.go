@@ -114,11 +114,20 @@ func bucketLanes(runs []tektonv1.PipelineRun, queueKey []string) map[string]*lan
 // Name for a deterministic order when timestamps collide.
 func sortFIFO(runs []*tektonv1.PipelineRun) {
 	sort.Slice(runs, func(i, j int) bool {
-		ti, tj := runs[i].CreationTimestamp, runs[j].CreationTimestamp
-		if !ti.Equal(&tj) {
-			return ti.Before(&tj)
-		}
-
-		return runs[i].Name < runs[j].Name
+		return fifoLess(runs[i], runs[j])
 	})
+}
+
+// fifoLess is the single total order used everywhere runs are compared for
+// age: CreationTimestamp first, Name as the tiebreak. CreationTimestamp has
+// one-second resolution, so runs created in the same second (e.g. duplicate
+// webhook deliveries) are otherwise incomparable — every ordering decision
+// must go through this comparator or same-second arrivals get inconsistent
+// treatment between admission and cancellation.
+func fifoLess(a, b *tektonv1.PipelineRun) bool {
+	if !a.CreationTimestamp.Equal(&b.CreationTimestamp) {
+		return a.CreationTimestamp.Before(&b.CreationTimestamp)
+	}
+
+	return a.Name < b.Name
 }

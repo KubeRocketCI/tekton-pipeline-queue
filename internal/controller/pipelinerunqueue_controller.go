@@ -263,12 +263,15 @@ func (r *PipelineRunQueueReconciler) admitRun(ctx context.Context, pr *tektonv1.
 }
 
 // markInvalidSelector sets a False Ready condition on queue explaining why
-// its spec.selector could not be parsed, and persists it.
+// its spec.selector could not be parsed, and persists it. Merge patch for
+// the same cache-staleness reason as updateStatus.
 func (r *PipelineRunQueueReconciler) markInvalidSelector(
 	ctx context.Context,
 	queue *edpv1alpha1.PipelineRunQueue,
 	cause error,
 ) error {
+	base := queue.DeepCopy()
+
 	apimeta.SetStatusCondition(&queue.Status.Conditions, metav1.Condition{
 		Type:               edpv1alpha1.ConditionReady,
 		Status:             metav1.ConditionFalse,
@@ -278,17 +281,23 @@ func (r *PipelineRunQueueReconciler) markInvalidSelector(
 	})
 	queue.Status.ObservedGeneration = queue.Generation
 
-	if err := r.Status().Update(ctx, queue); err != nil {
-		return fmt.Errorf("failed to update PipelineRunQueue status for invalid selector: %w", err)
+	if err := r.Status().Patch(ctx, queue, client.MergeFrom(base)); err != nil {
+		return fmt.Errorf("failed to patch PipelineRunQueue status for invalid selector: %w", err)
 	}
 
 	return nil
 }
 
-// updateStatus re-fetches queue to avoid conflicting with any concurrent
-// spec edit, applies the freshly computed lane projection, and persists it
-// only if it actually changed, so our own status write does not force
-// perpetual re-reconciliation.
+// updateStatus re-fetches queue, applies the freshly computed lane
+// projection, and persists it only if it actually changed, so our own
+// status write does not force perpetual re-reconciliation.
+//
+// The write is a merge patch without optimistic locking rather than an
+// Update: the re-Get is served from the (possibly stale) cache, so right
+// after our own previous status write an Update would routinely fail with
+// a resourceVersion conflict during event bursts. Last-writer-wins is safe
+// here because every reconcile recomputes the full projection from the
+// live PipelineRun set.
 func (r *PipelineRunQueueReconciler) updateStatus(
 	ctx context.Context,
 	key client.ObjectKey,
@@ -304,7 +313,7 @@ func (r *PipelineRunQueueReconciler) updateStatus(
 		return fmt.Errorf("failed to re-get PipelineRunQueue before status update: %w", err)
 	}
 
-	original := queue.Status.DeepCopy()
+	base := queue.DeepCopy()
 
 	apimeta.SetStatusCondition(&queue.Status.Conditions, metav1.Condition{
 		Type:               edpv1alpha1.ConditionReady,
@@ -318,12 +327,12 @@ func (r *PipelineRunQueueReconciler) updateStatus(
 	queue.Status.RunningCount = runningTotal
 	queue.Status.ObservedGeneration = queue.Generation
 
-	if apiequality.Semantic.DeepEqual(original, &queue.Status) {
+	if apiequality.Semantic.DeepEqual(&base.Status, &queue.Status) {
 		return nil
 	}
 
-	if err := r.Status().Update(ctx, queue); err != nil {
-		return fmt.Errorf("failed to update PipelineRunQueue status: %w", err)
+	if err := r.Status().Patch(ctx, queue, client.MergeFrom(base)); err != nil {
+		return fmt.Errorf("failed to patch PipelineRunQueue status: %w", err)
 	}
 
 	return nil

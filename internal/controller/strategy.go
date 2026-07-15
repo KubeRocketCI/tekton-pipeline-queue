@@ -73,7 +73,12 @@ func replaceQueued(queued []*tektonv1.PipelineRun) (kept, cancel []*tektonv1.Pip
 	return []*tektonv1.PipelineRun{newest}, append([]*tektonv1.PipelineRun{}, queued[:len(queued)-1]...)
 }
 
-// cancelSupersededOccupying returns the occupying runs older than newest.
+// cancelSupersededOccupying returns the occupying runs older than newest in
+// FIFO order. The comparison must use fifoLess, not raw CreationTimestamp:
+// with the timestamp's one-second resolution, an occupying run created in
+// the same second as its superseding arrival (duplicate webhooks, bursts)
+// would otherwise never be considered older and escape cancellation until
+// it finishes on its own.
 func cancelSupersededOccupying(
 	occupying []*tektonv1.PipelineRun,
 	newest *tektonv1.PipelineRun,
@@ -81,7 +86,7 @@ func cancelSupersededOccupying(
 	var cancel []*tektonv1.PipelineRun
 
 	for _, occ := range occupying {
-		if occ.CreationTimestamp.Before(&newest.CreationTimestamp) {
+		if fifoLess(occ, newest) {
 			cancel = append(cancel, occ)
 		}
 	}

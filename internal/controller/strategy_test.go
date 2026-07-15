@@ -175,6 +175,24 @@ func TestApplyStrategyCancelInProgress(t *testing.T) {
 		equalNames(t, "admit", admit, nil)
 	})
 
+	t.Run("same-second occupying run is still superseded via the name tiebreak", func(t *testing.T) {
+		t.Parallel()
+
+		// CreationTimestamp has one-second resolution, so a burst (e.g.
+		// duplicate webhook deliveries) yields identical timestamps; the
+		// occupying run must still be recognized as older via the FIFO
+		// name tiebreak, or it escapes cancellation entirely.
+		l := &lane{
+			occupying: []*tektonv1.PipelineRun{runningRun("burst-1", nil, 0)},
+			queued:    []*tektonv1.PipelineRun{pendingRun("burst-4", nil, 0)},
+		}
+
+		admit, cancel := applyStrategy(l, edpv1alpha1.QueueStrategyCancelInProgress, 1)
+
+		equalNames(t, "cancel", cancel, []string{"burst-1"})
+		equalNames(t, "admit", admit, nil)
+	})
+
 	t.Run("empty queued cancels nothing, even with occupying runs", func(t *testing.T) {
 		t.Parallel()
 
