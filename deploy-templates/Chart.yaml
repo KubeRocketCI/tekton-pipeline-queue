@@ -1,0 +1,51 @@
+apiVersion: v2
+description: A Helm chart for the Tekton Pipeline Queue operator
+home: https://docs.kuberocketci.io/
+name: tekton-pipeline-queue
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+keywords:
+  - custom-task
+  - kuberocketci
+  - pipeline
+  - queue
+  - tekton
+maintainers:
+  - name: epmd-edp
+    email: SupportEPMD-EDP@epam.com
+    url: https://solutionshub.epam.com/solution/kuberocketci
+sources:
+  - https://github.com/KubeRocketCI/tekton-pipeline-queue
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/images: |
+    - name: tekton-pipeline-queue:0.1.0
+      image: epamedp/tekton-pipeline-queue:0.1.0
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/crds: |
+    - kind: PipelineRunQueue
+      version: edp.epam.com/v1alpha1
+      name: pipeline-run-queue
+      displayName: Pipeline Run Queue
+      description: Governs concurrency and admission ordering of Tekton PipelineRuns
+  artifacthub.io/crdsExamples: |
+    - apiVersion: edp.epam.com/v1alpha1
+      kind: PipelineRunQueue
+      metadata:
+        name: deploy-queue
+      spec:
+        selector:
+          matchLabels:
+            app.edp.epam.com/pipelinetype: deploy
+        queueKey:
+          - app.edp.epam.com/cdpipeline
+          - app.edp.epam.com/cdstage
+        concurrency: 1
+        strategy: Queue
+  artifacthub.io/links: |
+    - name: KubeRocketCI Documentation
+      url: https://docs.kuberocketci.io
+    - name: EPAM SolutionHub
+      url: https://solutionshub.epam.com/solution/kuberocketci

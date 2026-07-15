@@ -1,0 +1,61 @@
+# -- component name
+name: tekton-pipeline-queue
+
+# -- Annotations to add to the deployment
+annotations: {}
+
+# -- Node labels for pod assignment
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity for pod assignment
+affinity: {}
+
+image:
+  # -- tekton-pipeline-queue image registry
+  registry: docker.io
+  # -- tekton-pipeline-queue Docker image name. The released image can be found on [Dockerhub](https://hub.docker.com/r/epamedp/tekton-pipeline-queue)
+  repository: epamedp/tekton-pipeline-queue
+  # -- tekton-pipeline-queue Docker image tag. The released image can be found on [Dockerhub](https://hub.docker.com/r/epamedp/tekton-pipeline-queue). If not defined then .Chart.AppVersion is used
+  tag:
+
+# -- Image pull policy
+imagePullPolicy: "IfNotPresent"
+
+# -- Optional array of imagePullSecrets containing private registry credentials
+## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry
+imagePullSecrets: []
+# - name: regcred
+
+# -- Additional volumes to add to the manager pod
+extraVolumes: []
+
+# -- Additional volume mounts to add to the manager container
+extraVolumeMounts: []
+
+# -- Resource requests/limits for the manager container.
+## Ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+resources:
+  limits:
+    memory: 192Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# -- Pod-level security context
+## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context
+## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

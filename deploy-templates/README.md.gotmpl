@@ -1,0 +1,140 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Introduction
+
+Tekton Pipeline Queue governs concurrency and admission ordering of Tekton `PipelineRun` resources.
+It defines the `PipelineRunQueue` CRD, which selects a set of `PipelineRun`s (via a label selector),
+groups them into lanes (via label-derived queue keys) and admits at most `concurrency` runs per lane
+according to a configurable strategy, keeping the rest queued until a slot becomes free.
+
+## Project Structure
+
+- **api/v1alpha1/**: Contains the API definitions for the `PipelineRunQueue` custom resource, including
+  the structure and validation of the CRD.
+- **cmd/**: Hosts the main application entry point and the command-line interface setup.
+- **config/**: Includes Kubernetes configuration files for deploying the controller, such as CRDs, RBAC
+  rules, and sample configurations.
+- **docs/**: Provides detailed documentation on the API and usage examples.
+- **deploy-templates/**: Contains Helm chart templates for deploying the controller.
+
+## Getting Started
+
+To get started with Tekton Pipeline Queue, ensure you have Kubernetes and Tekton Pipelines installed in
+your environment. Follow these steps to deploy the controller:
+
+1. Clone the repository to your local environment.
+2. Navigate to the `config/` directory.
+3. Apply the CRDs to your Kubernetes cluster:
+
+   ```bash
+   kubectl apply -f config/crd/bases/
+   ```
+
+### Deploy with Helm
+
+1. To add the Helm EPAMEDP Charts for local client, run "helm repo add":
+
+    ```bash
+    helm repo add epamedp https://epam.github.io/edp-helm-charts/stable
+    ```
+
+2. Choose available Helm chart version:
+
+    ```bash
+    helm search repo epamedp/tekton-pipeline-queue -l
+    NAME                              CHART VERSION   APP VERSION     DESCRIPTION
+    epamedp/tekton-pipeline-queue      0.1.0          0.1.0          A Helm chart for the Tekton Pipeline Queue operator
+    ```
+
+    _**NOTE:** It is highly recommended to use the latest released version._
+
+3. Full chart parameters available in [deploy-templates/README.md](deploy-templates/README.md).
+
+4. Install operator with the following command:
+
+    ```bash
+    helm install tekton-pipeline-queue epamedp/tekton-pipeline-queue --version <chart_version>
+    ```
+
+5. Check the namespace that should contain the Tekton Pipeline Queue controller in a running status.
+
+### Deploy with cluster add-ons
+
+1. Navigate to the forked [edp-cluster-add-ons](https://github.com/epam/edp-cluster-add-ons) repository.
+
+2. Enable the deployment of the Tekton Pipeline Queue Helm chart by setting the
+   `tekton-pipeline-queue.enable` and `tekton-pipeline-queue.createNamespace` values to `true` in the
+   `clusters/core/apps/values.yaml` file.
+
+    ```yaml title="clusters/core/apps/values.yaml"
+    tekton-pipeline-queue:
+      createNamespace: true
+      enable: true
+    ```
+
+3. Update the `clusters/core/addons/tekton-pipeline-queue/values.yaml` file with the desired
+   configuration for the Tekton Pipeline Queue Helm chart.
+
+4. After updating the `values.yaml` file, commit the changes to the repository and apply the changes
+   with Helm or Argo CD.
+
+## Usage
+
+Create a `PipelineRunQueue` that selects the `PipelineRun`s to govern and defines how they are grouped
+into lanes:
+
+```yaml
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: deploy-queue
+spec:
+  selector:
+    matchLabels:
+      app.edp.epam.com/pipelinetype: deploy
+  queueKey:
+    - app.edp.epam.com/cdpipeline
+    - app.edp.epam.com/cdstage
+  concurrency: 1
+  strategy: Queue
+```
+
+Apply the definition to your Kubernetes cluster:
+
+```sh
+kubectl apply -f pipelinerunqueue.yaml
+```
+
+## Features
+
+- **Lane-based Concurrency Control**: Group `PipelineRun`s into independent lanes via label-derived
+  queue keys and cap the number of concurrently running runs per lane.
+- **Configurable Admission Strategy**: Choose whether newer runs queue behind, replace queued, or
+  cancel in-progress runs in the same lane.
+- **Flexible Selection**: Use a standard Kubernetes label selector to choose which `PipelineRun`s a
+  queue governs.
+
+## Contributing
+
+We welcome contributions in the form of issues and pull requests. Please follow the contributing
+guidelines outlined in the repository.
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE.txt).
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
