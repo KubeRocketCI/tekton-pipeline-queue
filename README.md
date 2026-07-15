@@ -1,4 +1,10 @@
-# tekton-pipeline-queue
+# Tekton Pipeline Queue
+
+[![CI](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/pr.yaml/badge.svg)](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/pr.yaml)
+[![E2E](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/e2e.yaml/badge.svg)](https://github.com/KubeRocketCI/tekton-pipeline-queue/actions/workflows/e2e.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/KubeRocketCI/tekton-pipeline-queue)](https://goreportcard.com/report/github.com/KubeRocketCI/tekton-pipeline-queue)
+[![Go Reference](https://pkg.go.dev/badge/github.com/KubeRocketCI/tekton-pipeline-queue.svg)](https://pkg.go.dev/github.com/KubeRocketCI/tekton-pipeline-queue)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A Kubernetes operator that queues [Tekton](https://tekton.dev) PipelineRuns.
 It serializes or limits concurrent PipelineRuns per *lane* — an arbitrary
@@ -32,30 +38,35 @@ observability (portal, `kubectl`).
 
 ## Example
 
-Serialize deployments per CD pipeline stage — one deploy at a time, the rest
-visibly queued:
+Review pipelines, one lane per pull request: each new push to a PR
+supersedes the previous commit's run — queued predecessors are cancelled
+and a still-running one is gracefully stopped — so CI spends resources
+only on the newest commit, the one that can actually merge:
 
 ```yaml
 apiVersion: edp.epam.com/v1alpha1
 kind: PipelineRunQueue
 metadata:
-  name: deploy-queue
+  name: review-queue
 spec:
   selector:
     matchLabels:
-      app.edp.epam.com/pipelinetype: deploy
+      app.edp.epam.com/pipelinetype: review
   queueKey:
-    - app.edp.epam.com/cdpipeline
-    - app.edp.epam.com/cdstage
+    - app.edp.epam.com/codebase
+    - app.edp.epam.com/git-change-number
   concurrency: 1
-  strategy: Queue
+  strategy: CancelInProgress
 ```
 
 ```console
-$ kubectl get pipelinerunqueue deploy-queue
+$ kubectl get pipelinerunqueue review-queue
 NAME           QUEUED   RUNNING   READY   AGE
-deploy-queue   4        1         True    2d
+review-queue   2        3         True    2d
 ```
+
+Different pull requests run in parallel (each is its own lane); pushes to
+the same pull request replace each other.
 
 ### Strategies
 
