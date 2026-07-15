@@ -89,3 +89,8 @@ Prometheus metrics (see [README](../README.md#metrics)): alert on
 - **`tekton.dev/pipeline` lane key and brand-new runs** — Tekton stamps that
   label on its first reconcile; in the brief window before it, the run sits in
   the empty-string lane. Key on a producer-set label if that matters.
+- **Operator memory** — the controller caches every PipelineRun in the
+  cluster (heavily stripped: only metadata, `spec.status`, and conditions are
+  retained), so its footprint scales with the number of runs Tekton's pruner
+  keeps around, not with their size. If memory grows unexpectedly, check the
+  cluster's completed-run retention before suspecting a leak.

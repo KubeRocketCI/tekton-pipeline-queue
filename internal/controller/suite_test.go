@@ -100,8 +100,11 @@ var _ = BeforeSuite(func() {
 	// Start a manager with the reconciler registered so watches actually
 	// drive admissions/cancellations, rather than only exercising Reconcile
 	// via direct, single-shot calls.
+	// CacheOptions mirrors production so tests fail loudly if the reconciler
+	// ever reads a field the cache transform strips.
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:  scheme.Scheme,
+		Cache:   CacheOptions(),
 		Metrics: metricsserver.Options{BindAddress: "0"},
 	})
 	Expect(err).NotTo(HaveOccurred())
