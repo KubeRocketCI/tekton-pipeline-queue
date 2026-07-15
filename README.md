@@ -69,44 +69,10 @@ Typical lane keys: `codebase + branch` for build pipelines,
 `codebase + change number` for review pipelines (with `ReplaceQueued` or
 `CancelInProgress`), `cdpipeline + cdstage` for deployments.
 
-### Lane per Pipeline name
-
-`queueKey` accepts any label key, including Tekton's own `tekton.dev/pipeline`
-label, which Tekton stamps from `spec.pipelineRef.name` on its first reconcile
-— before honoring the Pending state — so pending runs group correctly:
-
-```yaml
-apiVersion: edp.epam.com/v1alpha1
-kind: PipelineRunQueue
-metadata:
-  name: per-pipeline-queue
-spec:
-  selector:
-    matchExpressions:
-      - key: tekton.dev/pipeline
-        operator: Exists
-  queueKey:
-    - tekton.dev/pipeline
-  concurrency: 1
-  strategy: Queue
-```
-
-There is a short window between run creation and Tekton's first reconcile
-where the label does not exist yet. If strict grouping from the very first
-instant matters, have the producer stamp its own label on the PipelineRun at
-creation (e.g. from the TriggerTemplate) and key the queue on that label
-instead.
-
-More examples (per codebase+branch build queue, per pull-request review queue
-with `CancelInProgress`): [config/samples](config/samples/edp_v1alpha1_pipelinerunqueue.yaml).
-
-### Avoiding overlapping queues
-
-Lanes within one queue are disjoint by construction — every run maps to
-exactly one lane. Keep *queues* disjoint too: give each queue a selector that
-partitions the run set, e.g. by `app.edp.epam.com/pipelinetype` (a run has
-exactly one value). Two queues whose selectors match the same run would count
-its lane slots independently.
+Full recipes — global caps, per-codebase serialization, latest-commit-wins
+reviews, freshest-payload deploys, lane per Pipeline name, and how to keep
+queues disjoint: [docs/use-cases.md](docs/use-cases.md). Ready-to-apply
+manifests: [config/samples](config/samples/edp_v1alpha1_pipelinerunqueue.yaml).
 
 ## Installation
 
@@ -132,8 +98,8 @@ The operator stamps every PipelineRun it acts on, in the same patch that
 changes `spec.status`: `app.edp.epam.com/queue`, `.../queue-lane`, and
 `.../queue-admitted-at` on admission; `.../queue`, `.../queue-lane`, and
 `.../queue-cancel-reason: superseded` on cancellation. A run without these
-annotations was never touched by the queue. How to read them, use-case
-recipes, and debugging steps: [docs/debugging.md](docs/debugging.md).
+annotations was never touched by the queue. How to read them and diagnose
+queue behavior: [docs/debugging.md](docs/debugging.md).
 
 ## Metrics
 
@@ -157,8 +123,8 @@ make manifests        # regenerate CRDs (config/crd/bases + deploy-templates/crd
 make helm-docs        # regenerate deploy-templates/README.md
 ```
 
-API reference: [docs/api.md](docs/api.md). Use cases and debugging:
-[docs/debugging.md](docs/debugging.md). Chart values:
+Documentation index: [docs/README.md](docs/README.md) — use cases,
+debugging, API reference. Chart values:
 [deploy-templates/README.md](deploy-templates/README.md).
 
 ## License

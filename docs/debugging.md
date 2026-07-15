@@ -1,43 +1,14 @@
-# Use cases and debugging
+# Debugging
 
-How to configure the common queueing scenarios, and how to answer "why is my
-PipelineRun waiting / cancelled / running" from cluster state alone.
+How to answer "why is my PipelineRun waiting / running / cancelled" from
+cluster state alone. Concepts are defined in the
+[documentation index](README.md); configuration recipes live in
+[use-cases.md](use-cases.md).
 
-## Use cases
-
-Ready-to-apply manifests for all of these:
-[config/samples](../config/samples/edp_v1alpha1_pipelinerunqueue.yaml).
-
-| Goal | selector | queueKey | concurrency / strategy |
-|---|---|---|---|
-| Max N review pipelines cluster-wide | `pipelinetype: review` | *(empty — one lane)* | `N` / `Queue` |
-| One pipeline at a time per codebase | `pipelinetype: review` | `codebase` | `1` / `Queue` |
-| One build per branch | `pipelinetype: build` | `codebase`, `codebasebranch` | `1` / `Queue` |
-| Latest commit wins per pull request | `pipelinetype: review` | `codebase`, `git-change-number` | `1` / `CancelInProgress` |
-| One deploy per environment, freshest payload | `pipelinetype: deploy` | `cdpipeline`, `cdstage` | `1` / `ReplaceQueued` |
-| One run per Pipeline name | `tekton.dev/pipeline` exists | `tekton.dev/pipeline` | `1` / `Queue` |
-
-(Label keys abbreviated; all are `app.edp.epam.com/...` except `tekton.dev/pipeline`.)
-
-Rules of thumb:
-
-- **Lanes within one queue are always disjoint** — a run maps to exactly one
-  lane. Scale by adding `queueKey` labels, not more queue objects.
-- **Keep queues disjoint from each other** by selecting on
-  `app.edp.epam.com/pipelinetype`: a run has exactly one value, so queues per
-  pipeline type can never overlap. Two queues matching the same run count its
-  lane slots independently — avoid that.
-- `Queue` never cancels anything; `ReplaceQueued` prunes the waiting line;
-  `CancelInProgress` also preempts running work. Never use replace-style
-  strategies for runs whose parameters a user pinned deliberately (e.g. manual
-  deploys of a chosen version) — give those a separate `Queue`-strategy queue.
-
-## Debugging
-
-### Why is my run Pending?
+## Why is my run Pending?
 
 ```console
-$ kubectl get pipelinerunqueue -n <ns>
+kubectl get pipelinerunqueue -n <ns>
 NAME           QUEUED   RUNNING   READY   AGE
 review-queue   3        1         True    2d
 ```
@@ -46,7 +17,7 @@ review-queue   3        1         True    2d
 line — your run's position is its index in `queued`:
 
 ```console
-$ kubectl get pipelinerunqueue review-queue -n <ns> -o jsonpath='{.status.lanes}' | jq
+kubectl get pipelinerunqueue review-queue -n <ns> -o jsonpath='{.status.lanes}' | jq
 ```
 
 If the run is Pending but appears in **no** queue's lanes, no queue selects it
@@ -57,10 +28,10 @@ If `READY` is `False`, read the condition — an invalid `spec.selector` stops
 the queue entirely until the spec is fixed:
 
 ```console
-$ kubectl get pipelinerunqueue review-queue -n <ns> -o jsonpath='{.status.conditions}' | jq
+kubectl get pipelinerunqueue review-queue -n <ns> -o jsonpath='{.status.conditions}' | jq
 ```
 
-### Who started / cancelled my run, and why?
+## Who started / cancelled my run, and why?
 
 The operator stamps annotations on every run it acts on, inside the same
 patch that changes `spec.status`:
@@ -73,7 +44,7 @@ patch that changes `spec.status`:
 | `queue-cancel-reason` | cancelled runs | `superseded` — a newer arrival in the lane replaced it |
 
 ```console
-$ kubectl get pipelinerun <name> -n <ns> -o jsonpath='{.metadata.annotations}' | jq
+kubectl get pipelinerun <name> -n <ns> -o jsonpath='{.metadata.annotations}' | jq
 ```
 
 Reading the combinations:
@@ -90,20 +61,20 @@ Reading the combinations:
 - **Both admit and cancel sets** — admitted first, then superseded while
   running (`CancelInProgress`).
 
-### Operator logs and metrics
+## Operator logs and metrics
 
 Every admission and cancellation is logged with queue, lane, run, and
 strategy:
 
 ```console
-$ kubectl logs deploy/tekton-pipeline-queue -n <ns> | grep -E 'Admitted|Cancelled'
+kubectl logs deploy/tekton-pipeline-queue -n <ns> | grep -E 'Admitted|Cancelled'
 ```
 
 Prometheus metrics (see [README](../README.md#metrics)): alert on
 `tekton_pipeline_queue_depth` growth and use
 `tekton_pipeline_queue_time_in_queue_seconds` to size `concurrency`.
 
-### Common pitfalls
+## Common pitfalls
 
 - **Runs stay Pending forever, no queue exists** — producers create Pending
   runs (e.g. TriggerTemplates were switched on) but the operator or the
