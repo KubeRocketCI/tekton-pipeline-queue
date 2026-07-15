@@ -1,9 +1,81 @@
+# Serialize deployments per CD pipeline stage: one deploy at a time per
+# (cdpipeline, cdstage) lane, later requests wait FIFO.
 apiVersion: edp.epam.com/v1alpha1
 kind: PipelineRunQueue
 metadata:
   labels:
     app.kubernetes.io/name: tekton-pipeline-queue
     app.kubernetes.io/managed-by: kustomize
-  name: pipelinerunqueue-sample
+  name: deploy-queue
 spec:
-  # TODO(user): Add fields here
+  selector:
+    matchLabels:
+      app.edp.epam.com/pipelinetype: deploy
+  queueKey:
+    - app.edp.epam.com/cdpipeline
+    - app.edp.epam.com/cdstage
+  concurrency: 1
+  strategy: Queue
+---
+# One lane per Tekton Pipeline name. Tekton stamps the tekton.dev/pipeline
+# label from spec.pipelineRef.name on its first reconcile, before honoring
+# the Pending state, so pending runs are grouped correctly. Note there is a
+# short window between run creation and Tekton's first reconcile where the
+# label is absent; if strict grouping from the very first instant matters,
+# have the producer set its own label at creation instead (see below).
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  labels:
+    app.kubernetes.io/name: tekton-pipeline-queue
+    app.kubernetes.io/managed-by: kustomize
+  name: per-pipeline-queue
+spec:
+  selector:
+    matchExpressions:
+      - key: tekton.dev/pipeline
+        operator: Exists
+  queueKey:
+    - tekton.dev/pipeline
+  concurrency: 1
+  strategy: Queue
+---
+# One lane per codebase (project) and branch for build pipelines, using
+# labels the producer (TriggerTemplate) sets at creation time — race-free
+# grouping that never depends on Tekton's own label propagation.
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  labels:
+    app.kubernetes.io/name: tekton-pipeline-queue
+    app.kubernetes.io/managed-by: kustomize
+  name: build-queue
+spec:
+  selector:
+    matchLabels:
+      app.edp.epam.com/pipelinetype: build
+  queueKey:
+    - app.edp.epam.com/codebase
+    - app.edp.epam.com/codebasebranch
+  concurrency: 1
+  strategy: Queue
+---
+# One lane per pull request for review pipelines: a new commit's run
+# supersedes queued runs for the same change, and cancels a still-running
+# older one.
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  labels:
+    app.kubernetes.io/name: tekton-pipeline-queue
+    app.kubernetes.io/managed-by: kustomize
+  name: review-queue
+spec:
+  selector:
+    matchLabels:
+      app.edp.epam.com/pipelinetype: review
+  queueKey:
+    - app.edp.epam.com/codebase
+    - app.edp.epam.com/git-change-number
+  concurrency: 1
+  strategy: CancelInProgress

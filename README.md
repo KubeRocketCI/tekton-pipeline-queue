@@ -69,6 +69,45 @@ Typical lane keys: `codebase + branch` for build pipelines,
 `codebase + change number` for review pipelines (with `ReplaceQueued` or
 `CancelInProgress`), `cdpipeline + cdstage` for deployments.
 
+### Lane per Pipeline name
+
+`queueKey` accepts any label key, including Tekton's own `tekton.dev/pipeline`
+label, which Tekton stamps from `spec.pipelineRef.name` on its first reconcile
+— before honoring the Pending state — so pending runs group correctly:
+
+```yaml
+apiVersion: edp.epam.com/v1alpha1
+kind: PipelineRunQueue
+metadata:
+  name: per-pipeline-queue
+spec:
+  selector:
+    matchExpressions:
+      - key: tekton.dev/pipeline
+        operator: Exists
+  queueKey:
+    - tekton.dev/pipeline
+  concurrency: 1
+  strategy: Queue
+```
+
+There is a short window between run creation and Tekton's first reconcile
+where the label does not exist yet. If strict grouping from the very first
+instant matters, have the producer stamp its own label on the PipelineRun at
+creation (e.g. from the TriggerTemplate) and key the queue on that label
+instead.
+
+More examples (per codebase+branch build queue, per pull-request review queue
+with `CancelInProgress`): [config/samples](config/samples/edp_v1alpha1_pipelinerunqueue.yaml).
+
+### Avoiding overlapping queues
+
+Lanes within one queue are disjoint by construction — every run maps to
+exactly one lane. Keep *queues* disjoint too: give each queue a selector that
+partitions the run set, e.g. by `app.edp.epam.com/pipelinetype` (a run has
+exactly one value). Two queues whose selectors match the same run would count
+its lane slots independently.
+
 ## Installation
 
 Requires an existing Tekton Pipelines installation (the operator watches

@@ -44,6 +44,32 @@ annotations:
           - app.edp.epam.com/cdstage
         concurrency: 1
         strategy: Queue
+    - apiVersion: edp.epam.com/v1alpha1
+      kind: PipelineRunQueue
+      metadata:
+        name: per-pipeline-queue
+      spec:
+        selector:
+          matchExpressions:
+            - key: tekton.dev/pipeline
+              operator: Exists
+        queueKey:
+          - tekton.dev/pipeline
+        concurrency: 1
+        strategy: Queue
+    - apiVersion: edp.epam.com/v1alpha1
+      kind: PipelineRunQueue
+      metadata:
+        name: review-queue
+      spec:
+        selector:
+          matchLabels:
+            app.edp.epam.com/pipelinetype: review
+        queueKey:
+          - app.edp.epam.com/codebase
+          - app.edp.epam.com/git-change-number
+        concurrency: 1
+        strategy: CancelInProgress
   artifacthub.io/links: |
     - name: KubeRocketCI Documentation
       url: https://docs.kuberocketci.io
