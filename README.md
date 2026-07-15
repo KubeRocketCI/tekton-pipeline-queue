@@ -69,11 +69,11 @@ the same pull request replace each other.
 
 ### Strategies
 
-| Strategy | Behavior |
-|---|---|
-| `Queue` | Strict FIFO admission; nothing is ever cancelled. |
-| `ReplaceQueued` | Queued runs superseded by a newer arrival in the same lane are cancelled; only the newest waits. |
-| `CancelInProgress` | As `ReplaceQueued`, plus running runs older than the newest arrival are gracefully cancelled. |
+| Strategy           | Behavior                                                                                         |
+|--------------------|--------------------------------------------------------------------------------------------------|
+| `Queue`            | Strict FIFO admission; nothing is ever cancelled.                                                |
+| `ReplaceQueued`    | Queued runs superseded by a newer arrival in the same lane are cancelled; only the newest waits. |
+| `CancelInProgress` | As `ReplaceQueued`, plus running runs older than the newest arrival are gracefully cancelled.    |
 
 Typical lane keys: `codebase + branch` for build pipelines,
 `codebase + change number` for review pipelines (with `ReplaceQueued` or
@@ -115,13 +115,13 @@ queue behavior: [docs/debugging.md](docs/debugging.md).
 
 Prometheus metrics exposed by the controller:
 
-| Metric | Type | Labels |
-|---|---|---|
-| `tekton_pipeline_queue_depth` | gauge | queue, namespace, lane |
-| `tekton_pipeline_queue_running` | gauge | queue, namespace, lane |
-| `tekton_pipeline_queue_admissions_total` | counter | queue, namespace |
-| `tekton_pipeline_queue_cancellations_total` | counter | queue, namespace, strategy |
-| `tekton_pipeline_queue_time_in_queue_seconds` | histogram | queue, namespace |
+| Metric                                        | Type      | Labels                     |
+|-----------------------------------------------|-----------|----------------------------|
+| `tekton_pipeline_queue_depth`                 | gauge     | queue, namespace, lane     |
+| `tekton_pipeline_queue_running`               | gauge     | queue, namespace, lane     |
+| `tekton_pipeline_queue_admissions_total`      | counter   | queue, namespace           |
+| `tekton_pipeline_queue_cancellations_total`   | counter   | queue, namespace, strategy |
+| `tekton_pipeline_queue_time_in_queue_seconds` | histogram | queue, namespace           |
 
 ## Development
 

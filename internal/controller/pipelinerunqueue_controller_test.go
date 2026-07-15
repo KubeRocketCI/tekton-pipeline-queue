@@ -200,6 +200,41 @@ var _ = Describe("PipelineRunQueue admission controller", func() {
 		expectSpecStatus(namespace, runs[1].Name, "")
 	})
 
+	It("never acts on PipelineRuns outside the queue's namespace", func() {
+		// The namespace boundary is the multi-tenant isolation property:
+		// a queue governs only runs in its own namespace, enforced by the
+		// InNamespace scoping in both Reconcile and the watch mapping.
+		Expect(k8sClient.Create(ctx, newQueue("scoped", namespace, laneLabels("scoped"), nil, 1,
+			edpv1alpha1.QueueStrategyQueue))).To(Succeed())
+
+		otherNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "prq-other-"}}
+		Expect(k8sClient.Create(ctx, otherNS)).To(Succeed())
+
+		// Matches the queue's selector but lives in another namespace.
+		foreign := newPipelineRun("foreign-run", otherNS.Name, laneLabels("scoped"), true)
+		Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
+
+		// A local run proves the queue is alive and admitting.
+		local := newPipelineRun("local-run", namespace, laneLabels("scoped"), true)
+		Expect(k8sClient.Create(ctx, local)).To(Succeed())
+
+		expectSpecStatus(namespace, local.Name, "")
+
+		// The foreign run must remain untouched: still Pending, no actor
+		// annotations, and invisible in the queue's projection.
+		Consistently(func(g Gomega) {
+			pr := &tektonv1.PipelineRun{}
+			g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: otherNS.Name, Name: foreign.Name}, pr)).To(Succeed())
+			g.Expect(pr.Spec.Status).To(Equal(tektonv1.PipelineRunSpecStatus(tektonv1.PipelineRunSpecStatusPending)))
+			g.Expect(pr.Annotations).NotTo(HaveKey(edpv1alpha1.AnnotationQueue))
+		}, 3*time.Second, testInterval).Should(Succeed())
+
+		lane := laneStatus(namespace, "scoped", "")
+		Expect(lane).NotTo(BeNil())
+		Expect(lane.Running).To(ConsistOf(local.Name))
+		Expect(lane.Queued).To(BeEmpty())
+	})
+
 	It("marks a queue with an invalid selector not ready and clears its projection", func() {
 		queue := newQueue("invalid", namespace, laneLabels("invalid"), nil, 1, edpv1alpha1.QueueStrategyQueue)
 		Expect(k8sClient.Create(ctx, queue)).To(Succeed())
