@@ -128,7 +128,7 @@ Prometheus metrics exposed by the controller:
 ```sh
 make build            # compile the manager
 make test             # unit + envtest integration tests
-make test-e2e         # Chainsaw e2e tests against a real Tekton install on Kind
+make start-kind && make e2e   # Chainsaw e2e on Kind (suite self-provisions Tekton + chart)
 make lint             # golangci-lint
 make manifests        # regenerate CRDs (config/crd/bases + deploy-templates/crds) and docs/api.md
 make helm-docs        # regenerate deploy-templates/README.md

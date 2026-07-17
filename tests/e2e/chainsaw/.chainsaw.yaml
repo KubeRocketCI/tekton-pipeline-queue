@@ -4,7 +4,9 @@ metadata:
   name: configuration
 spec:
   parallel: 1
-  failFast: false
+  # failFast so a 00-install provisioning failure aborts the suite instead
+  # of cascading the same error through every scenario.
+  failFast: true
   fullName: true
   timeouts:
     apply: 30s

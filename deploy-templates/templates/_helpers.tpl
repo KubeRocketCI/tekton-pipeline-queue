@@ -54,7 +54,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Fully qualified image reference.
 */}}
 {{- define "tekton-pipeline-queue.image" -}}
-{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion | toString }}
 {{- if .Values.image.registry }}
 {{- printf "%s/%s:%s" .Values.image.registry .Values.image.repository $tag }}
 {{- else }}

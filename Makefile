@@ -69,66 +69,53 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-# e2e tests are Chainsaw-based (tests/e2e/chainsaw/), run against a real Kind
-# cluster with Tekton Pipelines and the operator installed via the Helm chart.
-# kubectl kuberc is disabled by default for test isolation; enable with:
-# - KUBECTL_KUBERC=true
-KIND_CLUSTER ?= tekton-pipeline-queue-test-e2e
+# e2e tests are Chainsaw-based (tests/e2e/chainsaw/) and follow the
+# cd-pipeline-operator approach: `make start-kind && make e2e`. All cluster
+# provisioning (Tekton Pipelines + the operator Helm chart) is done by
+# install steps inside each Chainsaw scenario, driven by the standard KRCI
+# e2e env contract below — the same contract the e2e-chainsaw Tekton task
+# provides when running the suite in a vcluster on the core cluster.
+# `make e2e` only builds the image, loads it into Kind, and runs Chainsaw.
+START_KIND_CLUSTER ?= true
+KIND_CLUSTER_NAME ?= tekton-pipeline-queue-test-e2e
+KUBE_VERSION ?= 1.34
+KIND_CONFIG ?= ./hack/kind-$(KUBE_VERSION).yaml
 
-.PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
-	@command -v $(KIND) >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
-	esac
+CONTAINER_REGISTRY_URL ?= docker.io
+CONTAINER_REGISTRY_SPACE ?= epamedp
+E2E_IMAGE_REPOSITORY ?= tekton-pipeline-queue
+ifeq ($(origin E2E_IMAGE_TAG), undefined)
+E2E_IMAGE_TAG := e2e-$(shell date +%s)
+endif
+E2E_IMG := $(CONTAINER_REGISTRY_URL)/$(CONTAINER_REGISTRY_SPACE)/$(E2E_IMAGE_REPOSITORY):$(E2E_IMAGE_TAG)
 
-# TEKTON_VERSION must name a tag that publishes a "release.yaml" GitHub
-# release asset (github.com/tektoncd/pipeline/releases); the legacy
-# storage.googleapis.com/tekton-releases bucket stopped receiving uploads
-# after v1.6.0, so we install from the GitHub release asset instead.
-TEKTON_VERSION ?= v1.11.1
-TEKTON_NAMESPACE ?= tekton-pipelines
+.PHONY: start-kind
+start-kind: ## Start the e2e Kind cluster (set START_KIND_CLUSTER=false to skip)
+ifeq (true,$(START_KIND_CLUSTER))
+	$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_CONFIG)
+endif
 
-.PHONY: install-tekton-e2e
-install-tekton-e2e: ## Install Tekton Pipelines into the e2e Kind cluster.
-	$(KUBECTL) --context kind-$(KIND_CLUSTER) apply -f \
-		https://github.com/tektoncd/pipeline/releases/download/$(TEKTON_VERSION)/release.yaml
-	$(KUBECTL) --context kind-$(KIND_CLUSTER) wait deployment --all \
-		--for=condition=Available --timeout=180s -n $(TEKTON_NAMESPACE)
+# LOAD_KIND_IMAGE=true builds the operator image and loads it into the local
+# Kind cluster before running the suite. Set to false when the target cluster
+# can pull the image from a registry (e.g. a vcluster on the core cluster,
+# image pushed by CI) — then pass the matching E2E_IMAGE_* variables.
+LOAD_KIND_IMAGE ?= true
 
-# TPQ_NAMESPACE is the namespace the operator itself is deployed into for
-# e2e; chainsaw test cases run in their own ephemeral namespaces (see
-# tests/e2e/chainsaw/.chainsaw.yaml) since the operator watches PipelineRuns
-# cluster-wide.
-TPQ_NAMESPACE ?= tpq-e2e
-E2E_IMG_REPO ?= tekton-pipeline-queue
-E2E_IMG_TAG := e2e-$(shell date +%s)
+.PHONY: e2e
+e2e: build chainsaw ## Run the full Chainsaw e2e suite against the CURRENT kubeconfig context (cluster-agnostic; scenarios self-provision prerequisites)
+ifeq (true,$(LOAD_KIND_IMAGE))
+	$(CONTAINER_TOOL) build -t $(E2E_IMG) .
+	$(KIND) load docker-image $(E2E_IMG) --name $(KIND_CLUSTER_NAME)
+endif
+	CONTAINER_REGISTRY_URL=$(CONTAINER_REGISTRY_URL) \
+	CONTAINER_REGISTRY_SPACE=$(CONTAINER_REGISTRY_SPACE) \
+	E2E_IMAGE_REPOSITORY=$(E2E_IMAGE_REPOSITORY) \
+	E2E_IMAGE_TAG=$(E2E_IMAGE_TAG) \
+	"$(CHAINSAW)" test --config tests/e2e/chainsaw/.chainsaw.yaml tests/e2e/chainsaw
 
-.PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet chainsaw ## Run Chainsaw e2e tests against the Kind cluster. Does NOT delete the cluster afterwards - run 'make cleanup-test-e2e' manually (CI does this automatically).
-	$(MAKE) install-tekton-e2e
-	$(CONTAINER_TOOL) build -t $(E2E_IMG_REPO):$(E2E_IMG_TAG) .
-	$(KIND) load docker-image $(E2E_IMG_REPO):$(E2E_IMG_TAG) --name $(KIND_CLUSTER)
-	helm upgrade --install tekton-pipeline-queue-e2e deploy-templates \
-		--kube-context kind-$(KIND_CLUSTER) \
-		--namespace $(TPQ_NAMESPACE) --create-namespace \
-		--set image.registry= \
-		--set image.repository=$(E2E_IMG_REPO) \
-		--set image.tag=$(E2E_IMG_TAG) \
-		--wait --timeout 2m
-	"$(CHAINSAW)" test --config tests/e2e/chainsaw/.chainsaw.yaml tests/e2e/chainsaw \
-		--kube-context kind-$(KIND_CLUSTER)
-
-.PHONY: cleanup-test-e2e
-cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+.PHONY: delete-kind
+delete-kind: ## Delete the e2e Kind cluster
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -165,9 +152,22 @@ endif
 
 ##@ Build
 
+# The binary is a container artifact, so GOOS defaults to linux regardless of
+# the host (use `make run` to execute locally). GOARCH is overridable so CI
+# can produce both architectures for multi-arch image builds:
+#   GOARCH=amd64 make build && GOARCH=arm64 make build
+# The Dockerfile only copies dist/manager-${TARGETARCH}; it compiles nothing.
+GOOS ?= linux
+GOARCH ?= $(shell go env GOARCH)
+
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet ## Build manager binary into dist/manager-$(GOARCH).
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o dist/manager-$(GOARCH) cmd/main.go
+
+.PHONY: clean
+clean:  ## clean up
+	-rm -rf dist
+	-rm -f cover.out
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -177,7 +177,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: build ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: docker-push
@@ -187,19 +187,18 @@ docker-push: ## Push docker image with the manager.
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
-# - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
-# To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# The Dockerfile copies prebuilt dist/manager-<arch> binaries, so every listed
+# platform needs a matching `GOARCH=<arch> make build` prerequisite below.
+PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+	GOARCH=amd64 $(MAKE) build
+	GOARCH=arm64 $(MAKE) build
 	- $(CONTAINER_TOOL) buildx create --name tekton-pipeline-queue-builder
 	$(CONTAINER_TOOL) buildx use tekton-pipeline-queue-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} .
 	- $(CONTAINER_TOOL) buildx rm tekton-pipeline-queue-builder
-	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
