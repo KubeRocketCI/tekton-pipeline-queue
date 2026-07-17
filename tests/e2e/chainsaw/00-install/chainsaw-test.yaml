@@ -1,0 +1,56 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: install-prerequisites
+spec:
+  description: >
+    Provisions the cluster for the whole suite. Chainsaw runs tests in
+    lexical order with parallel 1, so the 00- prefix guarantees this test
+    executes before every scenario: it installs Tekton Pipelines and the
+    operator Helm chart into the current kubeconfig context (Kind locally
+    and in GitHub Actions, a vcluster in the core-cluster pipeline). No
+    cleanup on purpose - the installs must outlive this test; the cluster
+    itself is disposable.
+  steps:
+  - name: install-tekton-pipelines
+    try:
+    - script:
+        content: |
+          set -e
+
+          # The tag must publish a "release.yaml" GitHub release asset.
+          # Idempotent: skipped when the Tekton CRDs are already present.
+          kubectl get crd pipelineruns.tekton.dev >/dev/null 2>&1 || {
+            kubectl apply -f https://github.com/tektoncd/pipeline/releases/download/v1.6.1/release.yaml
+            kubectl wait deployment --all --for=condition=Available --timeout=180s -n tekton-pipelines
+          }
+        timeout: 5m
+        check:
+          ($error == null): true
+  - name: install-tekton-pipeline-queue
+    try:
+    - script:
+        bindings:
+        - name: image_repository
+          value: (join('/', [env('CONTAINER_REGISTRY_SPACE'), env('E2E_IMAGE_REPOSITORY')]))
+        env:
+        - name: IMAGE_REGISTRY
+          value: (env('CONTAINER_REGISTRY_URL'))
+        - name: IMAGE_REPOSITORY
+          value: ($image_repository)
+        - name: IMAGE_TAG
+          value: (env('E2E_IMAGE_TAG'))
+        content: |
+          set -e
+
+          # Fixed namespace on purpose: the operator watches PipelineRuns
+          # cluster-wide; scenarios run in their own ephemeral namespaces.
+          helm upgrade --install tekton-pipeline-queue-e2e ../../../../deploy-templates \
+            --set image.registry=$IMAGE_REGISTRY \
+            --set image.repository=$IMAGE_REPOSITORY \
+            --set image.tag=$IMAGE_TAG \
+            --namespace tpq-e2e --create-namespace \
+            --wait --timeout 2m
+        timeout: 3m
+        check:
+          ($error == null): true

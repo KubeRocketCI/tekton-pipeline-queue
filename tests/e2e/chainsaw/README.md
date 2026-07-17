@@ -1,11 +1,27 @@
 # Chainsaw e2e tests
 
 Chainsaw-based end-to-end scenarios exercising the queue controller against
-a real Tekton Pipelines install. Run via `make test-e2e` from the repo root
-(builds the operator image, loads it into a Kind cluster, installs Tekton
-and the Helm chart, then runs Chainsaw).
+a real Tekton Pipelines install. The suite is self-provisioning and runs as
+ONE unit: the `00-install` test executes first (lexical order, `parallel:
+1`) and provisions the current kubeconfig context — Tekton Pipelines
+(idempotent, skipped if the CRDs already exist) and the operator Helm chart
+into the fixed `tpq-e2e` namespace — then every scenario runs against that
+install. The operator image is resolved from the standard KRCI e2e env
+contract: `CONTAINER_REGISTRY_URL` / `CONTAINER_REGISTRY_SPACE` /
+`E2E_IMAGE_REPOSITORY` / `E2E_IMAGE_TAG` (same contract as
+cd-pipeline-operator and the `e2e-chainsaw` Tekton task on the core
+cluster, which runs this suite inside a vcluster). Always run the suite
+whole — individual scenarios assume `00-install` has run.
+
+Run locally via `make start-kind && make e2e` from the repo root (creates
+the Kind cluster, builds the operator image, loads it into Kind, exports
+the env contract, runs Chainsaw). `make delete-kind` tears the cluster
+down.
 
 Each directory under this folder is one scenario:
+
+- `00-install` — suite provisioning (Tekton Pipelines + operator chart),
+  not a behavior test; must sort first.
 
 - `fifo-admission` — strict FIFO admission with no queueKey.
 - `concurrency` — concurrency > 1 admits multiple runs per lane.
