@@ -147,7 +147,7 @@ This project is licensed under the [Apache License 2.0](LICENSE.txt).
 | annotations | object | `{}` | Annotations to add to the deployment |
 | extraVolumeMounts | list | `[]` | Additional volume mounts to add to the manager container |
 | extraVolumes | list | `[]` | Additional volumes to add to the manager pod |
-| image.registry | string | `"docker.io"` | tekton-pipeline-queue image registry |
+| image.registry | string | `""` | tekton-pipeline-queue image registry. Leave empty to use the repository as-is (Docker Hub by default) |
 | image.repository | string | `"epamedp/tekton-pipeline-queue"` | tekton-pipeline-queue Docker image name. The released image can be found on [Dockerhub](https://hub.docker.com/r/epamedp/tekton-pipeline-queue) |
 | image.tag | string | `nil` | tekton-pipeline-queue Docker image tag. The released image can be found on [Dockerhub](https://hub.docker.com/r/epamedp/tekton-pipeline-queue). If not defined then .Chart.AppVersion is used |
 | imagePullPolicy | string | `"IfNotPresent"` | Image pull policy |
