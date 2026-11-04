@@ -14,7 +14,7 @@ permissions:
   security-events: write
 
 env:
-  GOLANG_VERSION: '1.26'
+  GOLANG_VERSION: '1.27'
 
 jobs:
 
